@@ -66,3 +66,22 @@ ENV SIMULATION_DISTANCE=4
 # ── Misc ──────────────────────────────────────────────────────────────────────
 # Rotate logs so the Railway volume doesn't fill up over time.
 ENV ENABLE_ROLLING_LOGS=TRUE
+
+# ── Backup ────────────────────────────────────────────────────────────────────
+# Automatic world backups saved to /data/backups/ on the persistent volume.
+# Override any of these via Railway environment variables.
+ENV BACKUP_ENABLED=true
+# Cron schedule — default: every 30 minutes. Uses standard cron syntax.
+ENV BACKUP_CRON="*/30 * * * *"
+# Number of .tar.gz archives to keep before rotating out old ones.
+ENV BACKUP_MAX_KEEP=5
+
+RUN apt-get update && apt-get install -y --no-install-recommends cron jq \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backup.sh     /usr/local/bin/mc-backup
+COPY death-feed.sh /usr/local/bin/mc-death-feed
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /usr/local/bin/mc-backup /usr/local/bin/mc-death-feed /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

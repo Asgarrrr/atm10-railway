@@ -9,6 +9,9 @@ discord-bot/bot
 .env.*
 !.env.example
 
+# ── Bot message content (customize locally, copy from messages.example.ts) ───
+discord-bot/src/messages.ts
+
 # ── Logs ──────────────────────────────────────────────────────────────────────
 logs/
 *.log
