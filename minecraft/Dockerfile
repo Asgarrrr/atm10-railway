@@ -9,20 +9,21 @@ FROM itzg/minecraft-server:java21
 ENV EULA=TRUE
 
 # ── Modpack ───────────────────────────────────────────────────────────────────
-# CF_API_KEY must be set as a Railway secret — never hardcode it here.
+# CF_API_KEY must be set as a Railway secret — used at runtime to download mods.
 # Get your key at https://console.curseforge.com/
-ENV TYPE=AUTO_CURSEFORGE
-# The modpack ZIP is bundled directly in the image.
-# To upgrade: replace Eternia.zip at the repo root and redeploy.
-ENV CF_MODPACK_ZIP=/modpack/Eternia.zip
+# Eternia is a custom modpack (not published on CurseForge), so we use TYPE=FORGE
+# and install mods from the bundled ZIP manifest at container startup.
+ENV TYPE=FORGE
+ENV VERSION=1.19.2
+ENV FORGE_VERSION=43.4.0
 
 # ── Memory ────────────────────────────────────────────────────────────────────
-# ATM10 loads ~500 mods. 8 GB max heap is the practical minimum for stability.
+# Eternia has ~54 mods (Forge 1.19.2). 6 GB max heap is comfortable.
 # INIT_MEMORY sets -Xms (committed at startup); MEMORY sets -Xmx (ceiling).
 # Railway bills on RSS, so starting lower reduces idle cost.
-# Override via Railway env vars if you need more headroom (e.g. MEMORY=10G).
-ENV INIT_MEMORY=4G
-ENV MEMORY=16G
+# Override via Railway env vars if you need more headroom (e.g. MEMORY=8G).
+ENV INIT_MEMORY=2G
+ENV MEMORY=6G
 
 # ── JVM tuning ────────────────────────────────────────────────────────────────
 # Aikar's flags: G1GC tuned for large heaps with many short-lived objects —
@@ -75,7 +76,7 @@ ENV BACKUP_MAX_KEEP=5
 
 COPY Eternia.zip /modpack/Eternia.zip
 
-RUN apt-get update && apt-get install -y --no-install-recommends cron jq \
+RUN apt-get update && apt-get install -y --no-install-recommends cron jq unzip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY minecraft/backup.sh     /usr/local/bin/mc-backup
