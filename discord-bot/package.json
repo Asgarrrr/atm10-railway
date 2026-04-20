@@ -8,7 +8,6 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
-    "@t3-oss/env-core": "^0.13.10",
     "discord.js": "^14.18.0",
     "minecraftstatuspinger": "^1.2.2",
     "zod": "^4.3.6"
