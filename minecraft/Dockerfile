@@ -1,4 +1,4 @@
-# ── Minecraft Server — All the Mods 10 (NeoForge 1.21.1) ─────────────────────
+# ── Minecraft Server — Eternia (modpack) ──────────────────────────────────────
 #
 # This service runs the game server only.
 # The Discord bot (discord-bot/) is deployed as a separate Railway service.
@@ -12,12 +12,9 @@ ENV EULA=TRUE
 # CF_API_KEY must be set as a Railway secret — never hardcode it here.
 # Get your key at https://console.curseforge.com/
 ENV TYPE=AUTO_CURSEFORGE
-ENV CF_SLUG=exQ9SuHb
-# Pin to a specific version to avoid unintended updates breaking your world.
-# Update this value when you want to upgrade the modpack.
-# Find version names at: https://www.curseforge.com/minecraft/modpacks/all-the-mods-10/files
-# To pin by exact file ID instead: replace CF_FILENAME_MATCHER with CF_FILE_ID=<id>
-ENV CF_FILENAME_MATCHER=6.6
+# The modpack ZIP is bundled directly in the image.
+# To upgrade: replace Eternia.zip at the repo root and redeploy.
+ENV CF_MODPACK_ZIP=/modpack/Eternia.zip
 
 # ── Memory ────────────────────────────────────────────────────────────────────
 # ATM10 loads ~500 mods. 8 GB max heap is the practical minimum for stability.
@@ -75,6 +72,8 @@ ENV BACKUP_ENABLED=true
 ENV BACKUP_CRON="*/30 * * * *"
 # Number of .tar.gz archives to keep before rotating out old ones.
 ENV BACKUP_MAX_KEEP=5
+
+COPY Eternia.zip /modpack/Eternia.zip
 
 RUN apt-get update && apt-get install -y --no-install-recommends cron jq \
     && rm -rf /var/lib/apt/lists/*
