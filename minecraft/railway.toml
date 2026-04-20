@@ -2,8 +2,7 @@
 dockerfilePath = "minecraft/Dockerfile"
 
 [deploy]
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 5
+restartPolicyType = "ALWAYS"
 
 [[volumes]]
 mountPath = "/data"
