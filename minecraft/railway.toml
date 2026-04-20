@@ -1,5 +1,5 @@
 [build]
-dockerfilePath = "Dockerfile"
+dockerfilePath = "minecraft/Dockerfile"
 
 [deploy]
 restartPolicyType = "ON_FAILURE"
