@@ -1,0 +1,5 @@
+{
+  "name": "atm10-railway",
+  "private": true,
+  "workspaces": ["discord-bot"]
+}
