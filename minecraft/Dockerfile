@@ -79,9 +79,9 @@ ENV BACKUP_MAX_KEEP=5
 RUN apt-get update && apt-get install -y --no-install-recommends cron jq \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backup.sh     /usr/local/bin/mc-backup
-COPY death-feed.sh /usr/local/bin/mc-death-feed
-COPY entrypoint.sh /entrypoint.sh
+COPY minecraft/backup.sh     /usr/local/bin/mc-backup
+COPY minecraft/death-feed.sh /usr/local/bin/mc-death-feed
+COPY minecraft/entrypoint.sh /entrypoint.sh
 RUN chmod +x /usr/local/bin/mc-backup /usr/local/bin/mc-death-feed /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
