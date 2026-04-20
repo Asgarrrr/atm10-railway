@@ -1,3 +1,4 @@
 [deploy]
 restartPolicyType = "ALWAYS"
+startCommand = "/app/bot"
 healthcheckPath = ""
