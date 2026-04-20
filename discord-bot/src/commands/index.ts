@@ -12,7 +12,7 @@ import {
 import { env } from "../env.ts";
 import { getStatus } from "../lib/mc.ts";
 import { withRcon } from "../lib/rcon.ts";
-import { restartService, stopService } from "../lib/railway.ts";
+import { restartService } from "../lib/railway.ts";
 
 type RepliableI = ChatInputCommandInteraction | ButtonInteraction;
 
@@ -355,43 +355,14 @@ async function runStopFlow(i: RepliableI): Promise<void> {
     return;
   }
 
-  // Optionally tell Railway to set replicas = 0 so the service stays stopped.
-  // With ON_FAILURE policy, a clean exit (code 0) won't auto-restart, but
-  // calling the API makes the stopped state explicit in the Railway dashboard.
-  const railwayCfg = getRailwayConfig();
-  if (railwayCfg) {
-    try {
-      await stopService(railwayCfg);
-      await i.editReply({
-        embeds: [
-          embed.success(
-            "Serveur arrêté",
-            "La commande `stop` a été envoyée via RCON et le service Railway a été mis à l'arrêt (replicas = 0).",
-          ),
-        ],
-      });
-    } catch (err) {
-      console.warn("Railway stopService failed:", err);
-      await i.editReply({
-        embeds: [
-          embed.warning(
-            "Serveur arrêté (RCON uniquement)",
-            "RCON `stop` envoyé. L'arrêt Railway a échoué — le service pourrait redémarrer selon la politique configurée.",
-          ),
-        ],
-      });
-    }
-  } else {
-    await i.editReply({
-      embeds: [
-        embed.success(
-          "Serveur arrêté",
-          "La commande `stop` a été envoyée via RCON. " +
-          "Configurez `RAILWAY_API_TOKEN` pour un arrêt Railway complet (replicas = 0).",
-        ),
-      ],
-    });
-  }
+  await i.editReply({
+    embeds: [
+      embed.success(
+        "Serveur arrêté",
+        "La commande `stop` a été envoyée via RCON. Le serveur ne redémarrera pas automatiquement (politique `ON_FAILURE`).",
+      ),
+    ],
+  });
 }
 
 async function handleStop(i: ChatInputCommandInteraction): Promise<void> {

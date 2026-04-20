@@ -107,32 +107,10 @@ export async function restartService(cfg: RailwayConfig): Promise<void> {
 }
 
 /**
- * Start the Minecraft service by restoring its replica count to 1 then
- * triggering a redeploy.
- *
- * Must be used instead of `restartService()` when the service was stopped via
- * `stopService()` (numReplicas = 0), because `serviceInstanceRedeploy` only
- * redeploys existing instances — with 0 replicas it is a no-op.
- *
- * @throws if the API call fails — callers should handle this gracefully.
- */
-export async function startService(cfg: RailwayConfig): Promise<void> {
-  await gql<{ serviceInstanceUpdate: boolean }>(
-    cfg.token,
-    UPDATE_INSTANCE_MUTATION,
-    {
-      serviceId:     cfg.serviceId,
-      environmentId: cfg.environmentId,
-      input:         { numReplicas: 1 },
-    },
-  );
-}
-
-/**
  * Stop the Minecraft service by setting its replica count to 0.
  *
  * With Railway's `ON_FAILURE` restart policy, this keeps the service stopped
- * until `startService()` is explicitly called. Without this call, a clean
+ * until `restartService()` is explicitly called. Without this call, a clean
  * RCON `stop` (exit code 0) would not trigger an automatic restart anyway,
  * but calling this ensures Railway's dashboard reflects the "stopped" state.
  *
