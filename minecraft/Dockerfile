@@ -12,7 +12,7 @@ ENV EULA=TRUE
 # CF_API_KEY must be set as a Railway secret — never hardcode it here.
 # Get your key at https://console.curseforge.com/
 ENV TYPE=AUTO_CURSEFORGE
-ENV CF_SLUG=all-the-mods-10
+ENV CF_SLUG=exQ9SuHb
 # Pin to a specific version to avoid unintended updates breaking your world.
 # Update this value when you want to upgrade the modpack.
 # Find version names at: https://www.curseforge.com/minecraft/modpacks/all-the-mods-10/files
