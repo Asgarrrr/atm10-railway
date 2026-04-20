@@ -1,4 +1,8 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonInteraction,
+  ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
   PermissionFlagsBits,
@@ -9,6 +13,8 @@ import { env } from "../env.ts";
 import { getStatus } from "../lib/mc.ts";
 import { withRcon } from "../lib/rcon.ts";
 import { restartService, stopService } from "../lib/railway.ts";
+
+type RepliableI = ChatInputCommandInteraction | ButtonInteraction;
 
 // ── Embed factories ───────────────────────────────────────────────────────────
 
@@ -26,7 +32,7 @@ const embed = {
     new EmbedBuilder().setColor(0xe67e22).setTitle(title).setDescription(desc ?? null),
 };
 
-// ── RCON helper ───────────────────────────────────────────────────────────────
+// ── Config helpers ─────────────────────────────────────────────────────────────
 
 function getRconConfig(): { host: string; port: number; password: string } | null {
   if (!env.MC_RCON_PASSWORD) return null;
@@ -99,212 +105,6 @@ export const COMMANDS = [
     ),
 ].map((c) => c.toJSON());
 
-// ── /status ───────────────────────────────────────────────────────────────────
-
-async function handleStatus(i: ChatInputCommandInteraction): Promise<void> {
-  await i.deferReply();
-
-  const s = await getStatus();
-
-  if (!s.online) {
-    await i.editReply({
-      embeds: [embed.error("Serveur hors ligne", "Le serveur ne répond pas au ping.")],
-    });
-    return;
-  }
-
-  const statusEmbed = new EmbedBuilder()
-    .setColor(0x2ecc71)
-    .setTitle("Serveur en ligne")
-    .addFields(
-      { name: "Version",  value: s.version ?? "Inconnue",                        inline: true },
-      { name: "Joueurs",  value: `${s.players.online} / ${s.players.max}`,        inline: true },
-      { name: "Latence",  value: s.latency !== null ? `${s.latency} ms` : "N/A", inline: true },
-    );
-
-  if (s.motd) {
-    statusEmbed.setDescription(`*${s.motd}*`);
-  }
-
-  if (s.players.list.length > 0) {
-    statusEmbed.addFields({
-      name:  "Connectés",
-      value: s.players.list.map((p) => `• ${p}`).join("\n"),
-    });
-  }
-
-  await i.editReply({ embeds: [statusEmbed] });
-}
-
-// ── /start ────────────────────────────────────────────────────────────────────
-//
-// With ENABLE_AUTOPAUSE=TRUE on the MC service, the JVM is frozen (SIGSTOP)
-// when no players are connected. Each TCP connection attempt to the MC port
-// acts as a "knock" that wakes the process. minecraftstatuspinger opens a TCP
-// connection on every call, so polling it is all we need to wake the server.
-
-async function handleStart(i: ChatInputCommandInteraction): Promise<void> {
-  await i.deferReply();
-
-  // Fast path — already online
-  const initial = await getStatus();
-  if (initial.online) {
-    const e = embed
-      .success("Serveur déjà en ligne")
-      .addFields(
-        { name: "Joueurs", value: `${initial.players.online} / ${initial.players.max}`, inline: true },
-      );
-    if (initial.version) e.addFields({ name: "Version", value: initial.version, inline: true });
-    await i.editReply({ embeds: [e] });
-    return;
-  }
-
-  // Guard against concurrent /start calls in the same guild
-  const key = i.guildId ?? "global";
-  if (startInProgress.has(key)) {
-    await i.editReply({
-      embeds: [embed.warning("Démarrage déjà en cours", "Un démarrage est déjà en attente dans ce serveur.")],
-    });
-    return;
-  }
-
-  startInProgress.add(key);
-
-  try {
-    const railwayCfg = getRailwayConfig();
-
-    if (railwayCfg) {
-      await i.editReply({
-        embeds: [embed.info("Démarrage en cours", "Déclenchement du redéploiement Railway...")],
-      });
-
-      try {
-        await restartService(railwayCfg);
-      } catch (err) {
-        // Non-fatal — log and continue polling; the service may already be starting.
-        console.warn("Railway restartService failed, polling anyway:", err);
-      }
-    }
-
-    await i.editReply({
-      embeds: [embed.info("Démarrage en cours", "En attente de la réponse du serveur (max 3 min).")],
-    });
-
-    await pollUntilOnline(i, 3 * 60_000);
-  } finally {
-    startInProgress.delete(key);
-  }
-}
-
-// ── /restart ──────────────────────────────────────────────────────────────────
-//
-// Sends RCON `stop`, waits for the server to go offline, then polls until it
-// comes back (Railway restarts the container automatically with policy ALWAYS).
-
-async function handleRestart(i: ChatInputCommandInteraction): Promise<void> {
-  await i.deferReply();
-
-  const key = i.guildId ?? "global";
-  if (startInProgress.has(key)) {
-    await i.editReply({
-      embeds: [embed.warning("Opération déjà en cours", "Un démarrage ou redémarrage est déjà en attente.")],
-    });
-    return;
-  }
-
-  const cfg = getRconConfig();
-  if (!cfg) {
-    await i.editReply({
-      embeds: [
-        embed.error(
-          "RCON non configuré",
-          "Ajoutez `MC_RCON_PASSWORD` dans les variables Railway du service Discord bot.",
-        ),
-      ],
-    });
-    return;
-  }
-
-  startInProgress.add(key);
-
-  try {
-    const COUNTDOWN_SECONDS = 10;
-    const railwayCfg = getRailwayConfig();
-
-    const s = await getStatus();
-    if (s.online) {
-      // Warn players then stop
-      try {
-        await withRcon(cfg.host, cfg.port, cfg.password, (r) =>
-          r.send(`say [Discord] Redémarrage du serveur dans ${COUNTDOWN_SECONDS} secondes (${i.user.username})`),
-        );
-      } catch {
-        // Not fatal
-      }
-
-      await i.editReply({
-        embeds: [embed.warning(`Redémarrage dans ${COUNTDOWN_SECONDS}s`, `Initié par **${i.user.username}**.`)],
-      });
-
-      await Bun.sleep(COUNTDOWN_SECONDS * 1000);
-
-      // Stop — server won't reply before shutting down, which is expected
-      await withRcon(cfg.host, cfg.port, cfg.password, async (r) => {
-        try { await r.send("stop"); } catch { /* expected */ }
-      }).catch(() => { /* server may already be stopping */ });
-    }
-
-    // Trigger a Railway redeploy so the container comes back up.
-    // With ON_FAILURE restart policy, a clean exit (code 0) does not trigger
-    // an automatic restart, so we must explicitly call the API.
-    if (railwayCfg) {
-      await i.editReply({
-        embeds: [embed.info("Redémarrage en cours", "Déclenchement du redéploiement Railway...")],
-      });
-
-      try {
-        await restartService(railwayCfg);
-      } catch (err) {
-        console.warn("Railway restartService failed during /restart:", err);
-        // Non-fatal — continue and poll; the service may restart via other means.
-      }
-    }
-
-    await i.editReply({
-      embeds: [
-        embed.info(
-          "Redémarrage en cours",
-          railwayCfg
-            ? "Redéploiement déclenché. Attente du retour du serveur (max 5 min)."
-            : "Attente de l'extinction puis du retour du serveur (max 5 min).\n" +
-              "Note : sans `RAILWAY_API_TOKEN`, le redémarrage automatique dépend de la politique Railway.",
-        ),
-      ],
-    });
-
-    // Wait for the server to go offline before polling for it to come back
-    const OFFLINE_WAIT_MS  = 20_000;
-    const OFFLINE_DEADLINE = Date.now() + 90_000;
-
-    let isOffline = false;
-    while (Date.now() < OFFLINE_DEADLINE) {
-      await Bun.sleep(OFFLINE_WAIT_MS);
-      const check = await getStatus();
-      if (!check.online) { isOffline = true; break; }
-    }
-
-    if (!isOffline) {
-      // The server might still be online (e.g. RCON stop failed silently)
-      // but we try to bring it back anyway
-    }
-
-    // Now wait for it to come back online (Railway redeploy + JVM + mod loading)
-    await pollUntilOnline(i, 5 * 60_000, true);
-  } finally {
-    startInProgress.delete(key);
-  }
-}
-
 // ── Shared polling helper ─────────────────────────────────────────────────────
 
 /**
@@ -314,11 +114,7 @@ async function handleRestart(i: ChatInputCommandInteraction): Promise<void> {
  * Each `getStatus()` call opens a TCP connection to the MC port, which also
  * acts as an autopause knock to wake the JVM if it was frozen.
  */
-async function pollUntilOnline(
-  i: ChatInputCommandInteraction,
-  maxWaitMs: number,
-  isRestart = false,
-): Promise<void> {
+async function pollUntilOnline(i: RepliableI, maxWaitMs: number, isRestart = false): Promise<void> {
   const POLL_INTERVAL = 8_000;
   const startedAt     = Date.now();
   const verb          = isRestart ? "Redémarrage" : "Démarrage";
@@ -332,16 +128,16 @@ async function pollUntilOnline(
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
 
       const readyEmbed = embed
-            .success("Serveur disponible")
-            .addFields(
-              { name: "Version", value: s.version ?? "Inconnue",                         inline: true },
-              { name: "Joueurs", value: `${s.players.online} / ${s.players.max}`,         inline: true },
-              { name: verb,      value: `${elapsed}s`,                                    inline: true },
-            );
+        .success("Serveur disponible")
+        .addFields(
+          { name: "Version", value: s.version ?? "Inconnue",                        inline: true },
+          { name: "Joueurs", value: `${s.players.online} / ${s.players.max}`,        inline: true },
+          { name: verb,      value: `${elapsed}s`,                                   inline: true },
+        );
 
       if (s.motd) readyEmbed.setDescription(`*${s.motd}*`);
 
-      await i.editReply({ embeds: [readyEmbed] });
+      await i.editReply({ embeds: [readyEmbed], components: [] });
       return;
     }
 
@@ -361,11 +157,115 @@ async function pollUntilOnline(
   });
 }
 
+// ── /status ───────────────────────────────────────────────────────────────────
+
+async function handleStatus(i: ChatInputCommandInteraction): Promise<void> {
+  await i.deferReply();
+  const s = await getStatus();
+
+  if (!s.online) {
+    const canStart = !!(getRailwayConfig() || getRconConfig());
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId("panel:start")
+        .setLabel("Démarrer")
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(!canStart),
+    );
+    await i.editReply({
+      embeds: [embed.error("Serveur hors ligne", "Le serveur ne répond pas au ping.")],
+      components: [row],
+    });
+    return;
+  }
+
+  const statusEmbed = new EmbedBuilder()
+    .setColor(0x2ecc71)
+    .setTitle("Serveur en ligne")
+    .addFields(
+      { name: "Version",  value: s.version ?? "Inconnue",                        inline: true },
+      { name: "Joueurs",  value: `${s.players.online} / ${s.players.max}`,        inline: true },
+      { name: "Latence",  value: s.latency !== null ? `${s.latency} ms` : "N/A", inline: true },
+    );
+
+  if (s.motd) statusEmbed.setDescription(`*${s.motd}*`);
+  if (s.players.list.length > 0) {
+    statusEmbed.addFields({
+      name:  "Connectés",
+      value: s.players.list.map((p) => `• ${p}`).join("\n"),
+    });
+  }
+
+  const hasRcon = !!getRconConfig();
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("panel:restart")
+      .setLabel("Redémarrer")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!hasRcon),
+    new ButtonBuilder()
+      .setCustomId("panel:stop")
+      .setLabel("Arrêter")
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(!hasRcon),
+  );
+
+  await i.editReply({ embeds: [statusEmbed], components: [row] });
+}
+
+// ── /start ────────────────────────────────────────────────────────────────────
+//
+// With ENABLE_AUTOPAUSE=TRUE on the MC service, the JVM is frozen (SIGSTOP)
+// when no players are connected. Each TCP connection attempt to the MC port
+// acts as a "knock" that wakes the process. minecraftstatuspinger opens a TCP
+// connection on every call, so polling it is all we need to wake the server.
+
+async function runStartFlow(i: RepliableI): Promise<void> {
+  const initial = await getStatus();
+  if (initial.online) {
+    const e = embed
+      .success("Serveur déjà en ligne")
+      .addFields({ name: "Joueurs", value: `${initial.players.online} / ${initial.players.max}`, inline: true });
+    if (initial.version) e.addFields({ name: "Version", value: initial.version, inline: true });
+    await i.editReply({ embeds: [e] });
+    return;
+  }
+
+  const key = i.guildId ?? "global";
+  if (startInProgress.has(key)) {
+    await i.editReply({
+      embeds: [embed.warning("Démarrage déjà en cours", "Un démarrage est déjà en attente dans ce serveur.")],
+    });
+    return;
+  }
+
+  startInProgress.add(key);
+  try {
+    const railwayCfg = getRailwayConfig();
+    if (railwayCfg) {
+      await i.editReply({ embeds: [embed.info("Démarrage en cours", "Déclenchement du redéploiement Railway...")] });
+      try {
+        await restartService(railwayCfg);
+      } catch (err) {
+        // Non-fatal — log and continue polling; the service may already be starting.
+        console.warn("Railway restartService failed, polling anyway:", err);
+      }
+    }
+    await i.editReply({ embeds: [embed.info("Démarrage en cours", "En attente de la réponse du serveur (max 3 min).")] });
+    await pollUntilOnline(i, 3 * 60_000);
+  } finally {
+    startInProgress.delete(key);
+  }
+}
+
+async function handleStart(i: ChatInputCommandInteraction): Promise<void> {
+  await i.deferReply();
+  await runStartFlow(i);
+}
+
 // ── /stop ─────────────────────────────────────────────────────────────────────
 
-async function handleStop(i: ChatInputCommandInteraction): Promise<void> {
-  await i.deferReply();
-
+async function runStopFlow(i: RepliableI): Promise<void> {
   const s = await getStatus();
   if (!s.online) {
     await i.editReply({ embeds: [embed.info("Serveur déjà arrêté", "Le serveur ne répond pas.")] });
@@ -385,9 +285,48 @@ async function handleStop(i: ChatInputCommandInteraction): Promise<void> {
     return;
   }
 
-  const COUNTDOWN_SECONDS = 15;
+  const playerNote = s.players.online > 0
+    ? `**${s.players.online}** joueur(s) en ligne seront avertis avant l'arrêt.`
+    : "Aucun joueur connecté.";
 
-  // Warn players in game
+  const confirmBtn = new ButtonBuilder()
+    .setCustomId("stop:confirm")
+    .setLabel("Confirmer l'arrêt")
+    .setStyle(ButtonStyle.Danger);
+  const cancelBtn = new ButtonBuilder()
+    .setCustomId("stop:cancel")
+    .setLabel("Annuler")
+    .setStyle(ButtonStyle.Secondary);
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(cancelBtn, confirmBtn);
+
+  await i.editReply({
+    embeds: [embed.warning("Arrêter le serveur ?", playerNote)],
+    components: [row],
+  });
+
+  const msg = await i.fetchReply();
+  let btn: ButtonInteraction;
+  try {
+    btn = await msg.awaitMessageComponent({
+      filter: (b) => b.user.id === i.user.id,
+      time: 30_000,
+    }) as ButtonInteraction;
+  } catch {
+    await i.editReply({ embeds: [embed.info("Annulé", "Confirmation expirée.")], components: [] });
+    return;
+  }
+
+  if (btn.customId === "stop:cancel") {
+    await btn.update({ embeds: [embed.info("Annulé", "Arrêt annulé.")], components: [] });
+    return;
+  }
+
+  const COUNTDOWN_SECONDS = 15;
+  await btn.update({
+    embeds: [embed.warning(`Arrêt dans ${COUNTDOWN_SECONDS}s`, `Les joueurs vont être avertis. Initié par **${i.user.username}**.`)],
+    components: [],
+  });
+
   try {
     await withRcon(cfg.host, cfg.port, cfg.password, (r) =>
       r.send(`say [Discord] Arret du serveur dans ${COUNTDOWN_SECONDS} secondes (${i.user.username})`),
@@ -396,26 +335,13 @@ async function handleStop(i: ChatInputCommandInteraction): Promise<void> {
     // Not fatal — server might not respond to the warning
   }
 
-  await i.editReply({
-    embeds: [
-      embed.warning(
-        `Arret dans ${COUNTDOWN_SECONDS}s`,
-        `Les joueurs ont ete avertis. Initie par **${i.user.username}**.`,
-      ),
-    ],
-  });
-
   await Bun.sleep(COUNTDOWN_SECONDS * 1000);
 
   try {
     // Fire-and-forget: the server stops before it can send a RCON response,
     // so we intentionally ignore the timeout rejection.
     await withRcon(cfg.host, cfg.port, cfg.password, async (r) => {
-      try {
-        await r.send("stop");
-      } catch {
-        // Expected — server shuts down before answering
-      }
+      try { await r.send("stop"); } catch { /* expected */ }
     });
   } catch (err) {
     await i.editReply({
@@ -466,6 +392,147 @@ async function handleStop(i: ChatInputCommandInteraction): Promise<void> {
       ],
     });
   }
+}
+
+async function handleStop(i: ChatInputCommandInteraction): Promise<void> {
+  await i.deferReply();
+  await runStopFlow(i);
+}
+
+// ── /restart ──────────────────────────────────────────────────────────────────
+//
+// Sends RCON `stop`, waits for the server to go offline, then polls until it
+// comes back (Railway restarts the container automatically with policy ALWAYS).
+
+async function runRestartFlow(i: RepliableI): Promise<void> {
+  const key = i.guildId ?? "global";
+  if (startInProgress.has(key)) {
+    await i.editReply({
+      embeds: [embed.warning("Opération déjà en cours", "Un démarrage ou redémarrage est déjà en attente.")],
+    });
+    return;
+  }
+
+  const cfg = getRconConfig();
+  if (!cfg) {
+    await i.editReply({
+      embeds: [
+        embed.error(
+          "RCON non configuré",
+          "Ajoutez `MC_RCON_PASSWORD` dans les variables Railway du service Discord bot.",
+        ),
+      ],
+    });
+    return;
+  }
+
+  const s = await getStatus();
+  const playerNote = s.online && s.players.online > 0
+    ? `**${s.players.online}** joueur(s) en ligne seront avertis.`
+    : s.online ? "Serveur en ligne, aucun joueur connecté." : "Le serveur n'est pas en ligne.";
+
+  const confirmBtn = new ButtonBuilder()
+    .setCustomId("restart:confirm")
+    .setLabel("Confirmer le redémarrage")
+    .setStyle(ButtonStyle.Primary);
+  const cancelBtn = new ButtonBuilder()
+    .setCustomId("restart:cancel")
+    .setLabel("Annuler")
+    .setStyle(ButtonStyle.Secondary);
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(cancelBtn, confirmBtn);
+
+  await i.editReply({
+    embeds: [embed.warning("Redémarrer le serveur ?", playerNote)],
+    components: [row],
+  });
+
+  const msg = await i.fetchReply();
+  let btn: ButtonInteraction;
+  try {
+    btn = await msg.awaitMessageComponent({
+      filter: (b) => b.user.id === i.user.id,
+      time: 30_000,
+    }) as ButtonInteraction;
+  } catch {
+    await i.editReply({ embeds: [embed.info("Annulé", "Confirmation expirée.")], components: [] });
+    return;
+  }
+
+  if (btn.customId === "restart:cancel") {
+    await btn.update({ embeds: [embed.info("Annulé", "Redémarrage annulé.")], components: [] });
+    return;
+  }
+
+  const COUNTDOWN_SECONDS = 10;
+  await btn.update({
+    embeds: [embed.warning(`Redémarrage dans ${COUNTDOWN_SECONDS}s`, `Initié par **${i.user.username}**.`)],
+    components: [],
+  });
+
+  startInProgress.add(key);
+  try {
+    if (s.online) {
+      try {
+        await withRcon(cfg.host, cfg.port, cfg.password, (r) =>
+          r.send(`say [Discord] Redémarrage du serveur dans ${COUNTDOWN_SECONDS} secondes (${i.user.username})`),
+        );
+      } catch {
+        // Not fatal
+      }
+
+      await Bun.sleep(COUNTDOWN_SECONDS * 1000);
+
+      // Stop — server won't reply before shutting down, which is expected
+      await withRcon(cfg.host, cfg.port, cfg.password, async (r) => {
+        try { await r.send("stop"); } catch { /* expected */ }
+      }).catch(() => { /* server may already be stopping */ });
+    }
+
+    // Trigger a Railway redeploy so the container comes back up.
+    // With ON_FAILURE restart policy, a clean exit (code 0) does not trigger
+    // an automatic restart, so we must explicitly call the API.
+    const railwayCfg = getRailwayConfig();
+    if (railwayCfg) {
+      await i.editReply({ embeds: [embed.info("Redémarrage en cours", "Déclenchement du redéploiement Railway...")] });
+      try {
+        await restartService(railwayCfg);
+      } catch (err) {
+        console.warn("Railway restartService failed during /restart:", err);
+        // Non-fatal — continue and poll; the service may restart via other means.
+      }
+    }
+
+    await i.editReply({
+      embeds: [
+        embed.info(
+          "Redémarrage en cours",
+          railwayCfg
+            ? "Redéploiement déclenché. Attente du retour du serveur (max 5 min)."
+            : "Attente de l'extinction puis du retour du serveur (max 5 min).\n" +
+              "Note : sans `RAILWAY_API_TOKEN`, le redémarrage automatique dépend de la politique Railway.",
+        ),
+      ],
+    });
+
+    // Wait for the server to go offline before polling for it to come back
+    const OFFLINE_WAIT_MS  = 20_000;
+    const OFFLINE_DEADLINE = Date.now() + 90_000;
+
+    while (Date.now() < OFFLINE_DEADLINE) {
+      await Bun.sleep(OFFLINE_WAIT_MS);
+      const check = await getStatus();
+      if (!check.online) break;
+    }
+
+    await pollUntilOnline(i, 5 * 60_000, true);
+  } finally {
+    startInProgress.delete(key);
+  }
+}
+
+async function handleRestart(i: ChatInputCommandInteraction): Promise<void> {
+  await i.deferReply();
+  await runRestartFlow(i);
 }
 
 // ── /players ──────────────────────────────────────────────────────────────────
@@ -583,31 +650,74 @@ async function handleCmd(i: ChatInputCommandInteraction): Promise<void> {
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export async function handleCommand(interaction: Interaction): Promise<void> {
-  if (!interaction.isChatInputCommand()) return;
-
-  const i = interaction;
-
-  try {
-    switch (i.commandName) {
-      case "status":  return await handleStatus(i);
-      case "start":   return await handleStart(i);
-      case "stop":    return await handleStop(i);
-      case "restart": return await handleRestart(i);
-      case "players": return await handlePlayers(i);
-      case "say":     return await handleSay(i);
-      case "cmd":     return await handleCmd(i);
+  // Slash commands
+  if (interaction.isChatInputCommand()) {
+    const i = interaction;
+    try {
+      switch (i.commandName) {
+        case "status":  return await handleStatus(i);
+        case "start":   return await handleStart(i);
+        case "stop":    return await handleStop(i);
+        case "restart": return await handleRestart(i);
+        case "players": return await handlePlayers(i);
+        case "say":     return await handleSay(i);
+        case "cmd":     return await handleCmd(i);
+      }
+    } catch (error) {
+      console.error(`Unhandled error in /${i.commandName}:`, error);
+      const fallback = { embeds: [embed.error("Erreur interne", "Une erreur s'est produite. Consultez les logs Railway.")] };
+      if (i.deferred || i.replied) {
+        await i.editReply(fallback).catch(() => undefined);
+      } else {
+        await i.reply({ ...fallback, ephemeral: true }).catch(() => undefined);
+      }
     }
-  } catch (error) {
-    console.error(`Unhandled error in /${i.commandName}:`, error);
+    return;
+  }
 
-    const fallback = {
-      embeds: [embed.error("Erreur interne", "Une erreur s'est produite. Consultez les logs Railway.")],
-    };
-
-    if (i.deferred || i.replied) {
-      await i.editReply(fallback).catch(() => undefined);
-    } else {
-      await i.reply({ ...fallback, ephemeral: true }).catch(() => undefined);
+  // Panel buttons from /status
+  if (interaction.isButton()) {
+    const btn = interaction;
+    try {
+      switch (btn.customId) {
+        case "panel:start": {
+          await btn.deferReply();
+          await runStartFlow(btn);
+          break;
+        }
+        case "panel:stop": {
+          if (!btn.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+            await btn.reply({
+              embeds: [embed.error("Permissions insuffisantes", "Cette action requiert la permission `Gérer le serveur`.")],
+              ephemeral: true,
+            });
+            return;
+          }
+          await btn.deferReply();
+          await runStopFlow(btn);
+          break;
+        }
+        case "panel:restart": {
+          if (!btn.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+            await btn.reply({
+              embeds: [embed.error("Permissions insuffisantes", "Cette action requiert la permission `Gérer le serveur`.")],
+              ephemeral: true,
+            });
+            return;
+          }
+          await btn.deferReply();
+          await runRestartFlow(btn);
+          break;
+        }
+      }
+    } catch (error) {
+      console.error(`Unhandled error in button ${btn.customId}:`, error);
+      const fallback = { embeds: [embed.error("Erreur interne", "Une erreur s'est produite. Consultez les logs Railway.")] };
+      if (btn.deferred || btn.replied) {
+        await btn.editReply(fallback).catch(() => undefined);
+      } else {
+        await btn.reply({ ...fallback, ephemeral: true }).catch(() => undefined);
+      }
     }
   }
 }
