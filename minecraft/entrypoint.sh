@@ -58,20 +58,17 @@ _install_mods() {
 
     url=$(curl -sf -H "x-api-key: ${CF_API_KEY:-}" \
       "https://api.curseforge.com/v1/mods/${proj}/files/${file}/download-url" \
-      | jq -r '.data // empty')
+      | jq -r '.data // empty') || true
 
     if [ -z "$url" ]; then
-      if [ "$req" = "true" ]; then
-        echo "[modpack] ERROR: no download URL for project=$proj file=$file"
-        return 1
-      fi
-      echo "[modpack] SKIP optional project=$proj file=$file"
+      # Distribution disabled on CurseForge — JAR must be in overrides/mods/
+      echo "[modpack] WARN: no API URL for project=$proj file=$file (distribution disabled — needs manual override)"
       continue
     fi
 
     fname=$(basename "$url" | sed 's/?.*//')
     echo "[modpack] [$i/$total] $fname"
-    curl -sfL -o "$_MODS_DIR/$fname" "$url"
+    curl -sfL -o "$_MODS_DIR/$fname" "$url" || echo "[modpack] WARN: download failed for $fname"
   done < <(printf '%s' "$manifest" | jq -c '.files[]')
 
   md5sum "$_MODPACK_ZIP" > "$_HASH_FILE"
@@ -81,7 +78,7 @@ _install_mods() {
 _CURRENT_HASH=$(md5sum "$_MODPACK_ZIP" | awk '{print $1}')
 _STORED_HASH=$(awk '{print $1}' "$_HASH_FILE" 2>/dev/null || echo "none")
 if [ "$_CURRENT_HASH" != "$_STORED_HASH" ]; then
-  _install_mods
+  _install_mods || echo "[modpack] WARNING: some mods could not be downloaded (server may be incomplete)"
 else
   echo "[modpack] Mods up to date (hash match), skipping install"
 fi
