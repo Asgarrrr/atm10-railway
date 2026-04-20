@@ -1,0 +1,19 @@
+{
+  "name": "mc-discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "@t3-oss/env-core": "^0.13.10",
+    "discord.js": "^14.18.0",
+    "minecraftstatuspinger": "^1.2.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
