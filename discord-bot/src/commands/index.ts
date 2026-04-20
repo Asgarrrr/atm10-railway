@@ -8,6 +8,7 @@ import {
 import { env } from "../env.ts";
 import { getStatus } from "../lib/mc.ts";
 import { withRcon } from "../lib/rcon.ts";
+import { restartService, stopService } from "../lib/railway.ts";
 
 // ── Embed factories ───────────────────────────────────────────────────────────
 
@@ -33,6 +34,15 @@ function getRconConfig(): { host: string; port: number; password: string } | nul
     host:     env.MC_RCON_HOST ?? env.MC_HOST,
     port:     Number(env.MC_RCON_PORT),
     password: env.MC_RCON_PASSWORD,
+  };
+}
+
+function getRailwayConfig(): { token: string; serviceId: string; environmentId: string } | null {
+  if (!env.RAILWAY_API_TOKEN || !env.RAILWAY_MC_SERVICE_ID || !env.RAILWAY_ENVIRONMENT_ID) return null;
+  return {
+    token:         env.RAILWAY_API_TOKEN,
+    serviceId:     env.RAILWAY_MC_SERVICE_ID,
+    environmentId: env.RAILWAY_ENVIRONMENT_ID,
   };
 }
 
@@ -161,6 +171,21 @@ async function handleStart(i: ChatInputCommandInteraction): Promise<void> {
   startInProgress.add(key);
 
   try {
+    const railwayCfg = getRailwayConfig();
+
+    if (railwayCfg) {
+      await i.editReply({
+        embeds: [embed.info("Démarrage en cours", "Déclenchement du redéploiement Railway...")],
+      });
+
+      try {
+        await restartService(railwayCfg);
+      } catch (err) {
+        // Non-fatal — log and continue polling; the service may already be starting.
+        console.warn("Railway restartService failed, polling anyway:", err);
+      }
+    }
+
     await i.editReply({
       embeds: [embed.info("Démarrage en cours", "En attente de la réponse du serveur (max 3 min).")],
     });
@@ -204,6 +229,7 @@ async function handleRestart(i: ChatInputCommandInteraction): Promise<void> {
 
   try {
     const COUNTDOWN_SECONDS = 10;
+    const railwayCfg = getRailwayConfig();
 
     const s = await getStatus();
     if (s.online) {
@@ -228,8 +254,32 @@ async function handleRestart(i: ChatInputCommandInteraction): Promise<void> {
       }).catch(() => { /* server may already be stopping */ });
     }
 
+    // Trigger a Railway redeploy so the container comes back up.
+    // With ON_FAILURE restart policy, a clean exit (code 0) does not trigger
+    // an automatic restart, so we must explicitly call the API.
+    if (railwayCfg) {
+      await i.editReply({
+        embeds: [embed.info("Redémarrage en cours", "Déclenchement du redéploiement Railway...")],
+      });
+
+      try {
+        await restartService(railwayCfg);
+      } catch (err) {
+        console.warn("Railway restartService failed during /restart:", err);
+        // Non-fatal — continue and poll; the service may restart via other means.
+      }
+    }
+
     await i.editReply({
-      embeds: [embed.info("Redémarrage en cours", "Attente de l'extinction puis du retour du serveur (max 5 min).")],
+      embeds: [
+        embed.info(
+          "Redémarrage en cours",
+          railwayCfg
+            ? "Redéploiement déclenché. Attente du retour du serveur (max 5 min)."
+            : "Attente de l'extinction puis du retour du serveur (max 5 min).\n" +
+              "Note : sans `RAILWAY_API_TOKEN`, le redémarrage automatique dépend de la politique Railway.",
+        ),
+      ],
     });
 
     // Wait for the server to go offline before polling for it to come back
@@ -248,7 +298,7 @@ async function handleRestart(i: ChatInputCommandInteraction): Promise<void> {
       // but we try to bring it back anyway
     }
 
-    // Now wait for it to come back online (Railway restart + JVM + mod loading)
+    // Now wait for it to come back online (Railway redeploy + JVM + mod loading)
     await pollUntilOnline(i, 5 * 60_000, true);
   } finally {
     startInProgress.delete(key);
@@ -367,16 +417,51 @@ async function handleStop(i: ChatInputCommandInteraction): Promise<void> {
         // Expected — server shuts down before answering
       }
     });
-
-    await i.editReply({
-      embeds: [embed.success("Serveur arrêté", "La commande `stop` a été envoyée via RCON.")],
-    });
   } catch (err) {
     await i.editReply({
       embeds: [
         embed.error(
           "Erreur RCON",
           err instanceof Error ? err.message : "Impossible de joindre le serveur via RCON.",
+        ),
+      ],
+    });
+    return;
+  }
+
+  // Optionally tell Railway to set replicas = 0 so the service stays stopped.
+  // With ON_FAILURE policy, a clean exit (code 0) won't auto-restart, but
+  // calling the API makes the stopped state explicit in the Railway dashboard.
+  const railwayCfg = getRailwayConfig();
+  if (railwayCfg) {
+    try {
+      await stopService(railwayCfg);
+      await i.editReply({
+        embeds: [
+          embed.success(
+            "Serveur arrêté",
+            "La commande `stop` a été envoyée via RCON et le service Railway a été mis à l'arrêt (replicas = 0).",
+          ),
+        ],
+      });
+    } catch (err) {
+      console.warn("Railway stopService failed:", err);
+      await i.editReply({
+        embeds: [
+          embed.warning(
+            "Serveur arrêté (RCON uniquement)",
+            "RCON `stop` envoyé. L'arrêt Railway a échoué — le service pourrait redémarrer selon la politique configurée.",
+          ),
+        ],
+      });
+    }
+  } else {
+    await i.editReply({
+      embeds: [
+        embed.success(
+          "Serveur arrêté",
+          "La commande `stop` a été envoyée via RCON. " +
+          "Configurez `RAILWAY_API_TOKEN` pour un arrêt Railway complet (replicas = 0).",
         ),
       ],
     });
