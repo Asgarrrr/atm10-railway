@@ -33,7 +33,7 @@ ENV MEMORY=16G
 ENV USE_AIKAR_FLAGS=true
 # Metaspace grows significantly with 500+ mods; cap it to avoid unbounded growth.
 # UseContainerSupport makes the JVM respect Railway's cgroup memory limits.
-ENV JVM_XX_OPTS="-XX:+UseContainerSupport -XX:MaxMetaspaceSize=512m"
+ENV JVM_XX_OPTS="-XX:+UseContainerSupport"
 
 # ── Watchdog ──────────────────────────────────────────────────────────────────
 # Disable the server watchdog (-1 = off). Without this, the JVM being frozen by
