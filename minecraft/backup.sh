@@ -1,5 +1,5 @@
 #!/bin/bash
-# Minecraft world backup script.
+# Minecraft world backup script
 # Runs inside the minecraft container, triggered by cron or manually.
 # Backs up world directories + config to /data/backups/<timestamp>.tar.gz
 
