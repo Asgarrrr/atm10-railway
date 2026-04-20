@@ -25,7 +25,7 @@ ENV CF_FILENAME_MATCHER=6.6
 # Railway bills on RSS, so starting lower reduces idle cost.
 # Override via Railway env vars if you need more headroom (e.g. MEMORY=10G).
 ENV INIT_MEMORY=4G
-ENV MEMORY=8G
+ENV MEMORY=16G
 
 # ── JVM tuning ────────────────────────────────────────────────────────────────
 # Aikar's flags: G1GC tuned for large heaps with many short-lived objects —
