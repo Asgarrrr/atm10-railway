@@ -149,6 +149,20 @@ export const messages = {
     },
   },
 
+  // ── /op ────────────────────────────────────────────────────────────────────
+  op: {
+    noRcon: {
+      title: "Action impossible",
+      description: "La connexion au serveur n'est pas configurée (`MC_RCON_PASSWORD` manquant).",
+    },
+    opTitle: "Droits op accordés",
+    deopTitle: "Droits op retirés",
+    opSuccess: (player: string) => `**${player}** est maintenant opérateur.`,
+    deopSuccess: (player: string) => `**${player}** n'est plus opérateur.`,
+    errorTitle: "Échec",
+    errorDescription: "Impossible de contacter le serveur.",
+  },
+
   // ── /backup ────────────────────────────────────────────────────────────────
   backup: {
     noRcon: {
