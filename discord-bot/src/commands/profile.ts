@@ -46,7 +46,7 @@ const PROFILE_PAGE_META: Record<
   { icon: string; author: string; footer: string; buttonLabel: string; color: number }
 > = {
   overview: {
-    icon: "✦",
+    icon: "👤",
     author: "Identité",
     footer: "Identité",
     buttonLabel: "Aura",
@@ -152,7 +152,7 @@ async function replyWithProfile(
   page: ProfilePage,
   ownerId: string,
 ): Promise<void> {
-  const { profile } = messages;
+  const { common, profile } = messages;
 
   try {
     const data = await fetchProfile(player);
@@ -166,8 +166,10 @@ async function replyWithProfile(
       return;
     }
 
+    console.error("[profile] failed to render profile card", error);
+
     await i.editReply({
-      embeds: [embed.error(profile.apiError.title, profile.apiError.description)],
+      embeds: [embed.error(common.internalError.title, common.internalError.description)],
       components: [],
     });
   }
