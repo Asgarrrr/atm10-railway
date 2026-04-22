@@ -6,13 +6,14 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   ContextMenuCommandBuilder,
-  type GuildMember,
+  EmbedBuilder,
   type InteractionEditReplyOptions,
   type UserContextMenuCommandInteraction,
   SlashCommandBuilder,
 } from "discord.js";
 import { messages } from "../messages.ts";
 import {
+  formatDecimal,
   fetchProfile,
   fetchProfileFromCandidates,
   formatDiscordTimestamp,
@@ -20,7 +21,13 @@ import {
   formatNumber,
   formatPlayTime,
   isProfileNotFound,
+  profileAdvancementsPerHour,
   profileBadges,
+  profileCardTitle,
+  profileChronicle,
+  profileDistancePerHour,
+  profileKillDeathRatio,
+  profileRenown,
   profileSummary,
   profileTitle,
   type PlayerProfile,
@@ -30,6 +37,32 @@ import { embed } from "./_shared.ts";
 type ProfilePage = "overview" | "stats" | "legend";
 
 const PROFILE_PAGES: ProfilePage[] = ["overview", "stats", "legend"];
+const PROFILE_PAGE_META: Record<
+  ProfilePage,
+  { icon: string; author: string; footer: string; buttonLabel: string; color: number }
+> = {
+  overview: {
+    icon: "🧭",
+    author: "Livre du Monde",
+    footer: "Vue d'ensemble",
+    buttonLabel: "Vue",
+    color: 0x3b82f6,
+  },
+  stats: {
+    icon: "⚔️",
+    author: "Registre de campagne",
+    footer: "Stats",
+    buttonLabel: "Stats",
+    color: 0xf97316,
+  },
+  legend: {
+    icon: "📜",
+    author: "Annales d'Eternia",
+    footer: "Légende",
+    buttonLabel: "Légende",
+    color: 0xeab308,
+  },
+};
 
 export const profileCommand = new SlashCommandBuilder()
   .setName("profile")
@@ -141,92 +174,142 @@ function buildProfileEmbed(data: PlayerProfile, page: ProfilePage, note?: string
   const title = profileTitle(data);
   const summary = profileSummary(data);
   const badges = profileBadges(data);
+  const renown = profileRenown(data);
+  const pageMeta = PROFILE_PAGE_META[page];
+  const distinctions = badges.length > 0
+    ? badges.map((badge) => `${badge.icon} ${badge.label}`).join(" • ")
+    : profile.noBadges;
 
-  const e = embed
-    .info(profile.title(data.name), profile.description(title, summary))
-    .setFooter({ text: `${profile.footer} • ${profile.pages[page]} (${PROFILE_PAGES.indexOf(page) + 1}/${PROFILE_PAGES.length})` });
+  const e = new EmbedBuilder()
+    .setColor(pageMeta.color)
+    .setAuthor({ name: `${pageMeta.icon} ${pageMeta.author}` })
+    .setTitle(profileCardTitle(data.name))
+    .setDescription([
+      `**${title}**`,
+      `${renown.stars} **${renown.tier}** • Score de renommée **${renown.score}/100**`,
+      summary,
+      "",
+      `**Distinctions**`,
+      distinctions,
+    ].join("\n"))
+    .setFooter({ text: `Archives d'Eternia • ${pageMeta.footer} (${PROFILE_PAGES.indexOf(page) + 1}/${PROFILE_PAGES.length})` });
+
+  if (data.last_saved_at) {
+    e.setTimestamp(new Date(data.last_saved_at));
+  }
 
   if (page === "overview") {
     return e.addFields(
-      { name: profile.fields.rank, value: title, inline: true },
-      { name: profile.fields.lastSaved, value: formatDiscordTimestamp(data.last_saved_at), inline: true },
-      { name: profile.fields.advancements, value: formatNumber(data.stats.completed_advancements), inline: true },
-      { name: profile.fields.playTime, value: formatPlayTime(data.stats.play_time_ticks), inline: true },
-      { name: profile.fields.distance, value: formatDistance(data.stats.distance_cm), inline: true },
-      { name: profile.fields.badges, value: badges.length > 0 ? badges.map((badge) => `• ${badge}`).join("\n") : profile.noBadges, inline: true },
+      {
+        name: "✦ Présence",
+        value: [
+          `**${profile.fields.playTime}**\n${formatPlayTime(data.stats.play_time_ticks)}`,
+          `**${profile.fields.lastSaved}**\n${formatDiscordTimestamp(data.last_saved_at)}`,
+        ].join("\n"),
+        inline: true,
+      },
+      {
+        name: "✦ Influence",
+        value: [
+          `**${profile.fields.advancements}**\n${formatNumber(data.stats.completed_advancements)}`,
+          `**${profile.fields.distance}**\n${formatDistance(data.stats.distance_cm)}`,
+          `**${profile.fields.blocksMined}**\n${formatNumber(data.stats.blocks_mined)}`,
+        ].join("\n"),
+        inline: true,
+      },
+      {
+        name: "✦ Aura",
+        value: [
+          `**${profile.fields.rank}**\n${title}`,
+          `**Renommée**\n${renown.tier}`,
+          `**Éclat**\n${renown.stars}`,
+        ].join("\n"),
+        inline: true,
+      },
+      {
+        name: "✦ Distinctions gravées",
+        value: badges.length > 0
+          ? badges.map((badge) => `${badge.icon} **${badge.label}**`).join("\n")
+          : profile.noBadges,
+      },
       ...(note ? [{ name: profile.fields.note, value: note }] : []),
     );
   }
 
   if (page === "stats") {
     return e.addFields(
+      statPanel("⚔️ Registre de combat", [
+        [profile.labels.mobKills, formatNumber(data.stats.mob_kills)],
+        [profile.labels.playerKills, formatNumber(data.stats.player_kills)],
+        [profile.labels.deaths, formatNumber(data.stats.deaths)],
+        ["Kills / mort", formatKillDeathRatio(data)],
+      ]),
+      statPanel("🧭 Registre d'exploration", [
+        [profile.labels.distance, formatDistance(data.stats.distance_cm)],
+        [profile.labels.blocksMined, formatNumber(data.stats.blocks_mined)],
+        [profile.labels.jumps, formatNumber(data.stats.jumps)],
+        ["Distance / heure", formatDistance(profileDistancePerHour(data))],
+      ]),
+      statPanel("⏳ Registre de progression", [
+        [profile.labels.playTime, formatPlayTime(data.stats.play_time_ticks)],
+        [profile.labels.advancements, formatNumber(data.stats.completed_advancements)],
+        ["Adv. / heure", formatDecimal(profileAdvancementsPerHour(data))],
+        ["Rang", renown.tier],
+      ]),
       {
-        name: profile.sections.combat,
-        value: [
-          `${profile.labels.mobKills}: **${formatNumber(data.stats.mob_kills)}**`,
-          `${profile.labels.playerKills}: **${formatNumber(data.stats.player_kills)}**`,
-          `${profile.labels.deaths}: **${formatNumber(data.stats.deaths)}**`,
-        ].join("\n"),
-        inline: true,
-      },
-      {
-        name: profile.sections.exploration,
-        value: [
-          `${profile.labels.distance}: **${formatDistance(data.stats.distance_cm)}**`,
-          `${profile.labels.blocksMined}: **${formatNumber(data.stats.blocks_mined)}**`,
-          `${profile.labels.jumps}: **${formatNumber(data.stats.jumps)}**`,
-        ].join("\n"),
-        inline: true,
-      },
-      {
-        name: profile.sections.progress,
-        value: [
-          `${profile.labels.playTime}: **${formatPlayTime(data.stats.play_time_ticks)}**`,
-          `${profile.labels.advancements}: **${formatNumber(data.stats.completed_advancements)}**`,
-          `${profile.labels.uuid}: \`${data.uuid}\``,
-        ].join("\n"),
+        name: "✦ Identité du voyageur",
+        value: `\`${data.uuid}\``,
       },
     );
   }
 
   return e.addFields(
     {
-      name: profile.sections.legend,
+      name: "🏅 Distinctions gravées",
       value: badges.length > 0
-        ? badges.map((badge) => `✅ ${badge}`).join("\n")
+        ? badges.map((badge) => `${badge.icon} **${badge.label}** — ${badge.flavor}`).join("\n")
         : profile.legend.noBadges,
     },
     {
-      name: profile.sections.chronicle,
-      value: [
-        profile.legend.lines.playTime(formatPlayTime(data.stats.play_time_ticks)),
-        profile.legend.lines.distance(formatDistance(data.stats.distance_cm)),
-        profile.legend.lines.mobs(formatNumber(data.stats.mob_kills)),
-        profile.legend.lines.deaths(formatNumber(data.stats.deaths)),
-      ].join("\n"),
+      name: "📜 Extrait des annales",
+      value: profileChronicle(data).map((line) => `> ${line}`).join("\n"),
     },
     {
-      name: profile.sections.records,
+      name: "🗺️ Repères de campagne",
       value: [
-        `${profile.labels.blocksMined}: **${formatNumber(data.stats.blocks_mined)}**`,
-        `${profile.labels.jumps}: **${formatNumber(data.stats.jumps)}**`,
-        `${profile.labels.lastSaved}: ${formatDiscordTimestamp(data.last_saved_at)}`,
+        `**${profile.labels.blocksMined}**\n${formatNumber(data.stats.blocks_mined)}`,
+        `**${profile.labels.jumps}**\n${formatNumber(data.stats.jumps)}`,
+        `**${profile.labels.lastSaved}**\n${formatDiscordTimestamp(data.last_saved_at)}`,
       ].join("\n"),
     },
   );
 }
 
 function buildProfileButtons(player: string, page: ProfilePage, ownerId: string) {
-  const { profile } = messages;
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     ...PROFILE_PAGES.map((item) =>
       new ButtonBuilder()
         .setCustomId(buildProfileButtonId(item, player, ownerId))
-        .setLabel(profile.pages[item])
+        .setEmoji(PROFILE_PAGE_META[item].icon)
+        .setLabel(PROFILE_PAGE_META[item].buttonLabel)
         .setStyle(item === page ? ButtonStyle.Primary : ButtonStyle.Secondary)
-        .setDisabled(item === page),
     ),
   );
+}
+
+function statPanel(name: string, rows: Array<[string, string]>) {
+  const width = rows.reduce((max, [label]) => Math.max(max, label.length), 0);
+  return {
+    name,
+    value: `\`\`\`\n${rows.map(([label, value]) => `${label.padEnd(width)}  ${value}`).join("\n")}\n\`\`\``,
+  };
+}
+
+function formatKillDeathRatio(profile: PlayerProfile): string {
+  const ratio = profileKillDeathRatio(profile);
+  if (ratio === null) return "N/A";
+  if (profile.stats.deaths === 0) return "Sans chute";
+  return formatDecimal(ratio);
 }
 
 function buildProfileButtonId(page: ProfilePage, player: string, ownerId: string): string {
