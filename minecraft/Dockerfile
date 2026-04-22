@@ -76,12 +76,18 @@ ENV BACKUP_CRON="*/30 * * * *"
 # Number of .tar.gz archives to keep before rotating out old ones.
 ENV BACKUP_MAX_KEEP=5
 
-RUN apt-get update && apt-get install -y --no-install-recommends cron jq \
+RUN apt-get update && apt-get install -y --no-install-recommends cron jq python3 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY minecraft/backup.sh     /usr/local/bin/mc-backup
-COPY minecraft/death-feed.sh /usr/local/bin/mc-death-feed
-COPY minecraft/entrypoint.sh /entrypoint.sh
-RUN chmod +x /usr/local/bin/mc-backup /usr/local/bin/mc-death-feed /entrypoint.sh
+COPY minecraft/backup.sh      /usr/local/bin/mc-backup
+COPY minecraft/restore.sh     /usr/local/bin/mc-restore
+COPY minecraft/restore-api.py /usr/local/bin/mc-restore-api
+COPY minecraft/death-feed.sh  /usr/local/bin/mc-death-feed
+COPY minecraft/entrypoint.sh  /entrypoint.sh
+RUN chmod +x /usr/local/bin/mc-backup /usr/local/bin/mc-restore \
+             /usr/local/bin/mc-restore-api /usr/local/bin/mc-death-feed /entrypoint.sh
+
+# Restore API — reachable by the Discord bot over Railway's private network
+EXPOSE 8081
 
 ENTRYPOINT ["/entrypoint.sh"]

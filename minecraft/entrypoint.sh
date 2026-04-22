@@ -24,6 +24,9 @@ else
   echo "[entrypoint] Backups disabled (BACKUP_ENABLED=${BACKUP_ENABLED})"
 fi
 
+# ── Restore API ───────────────────────────────────────────────────────────────
+python3 /usr/local/bin/mc-restore-api &
+
 # ── Death feed ────────────────────────────────────────────────────────────────
 /usr/local/bin/mc-death-feed &
 

@@ -6,11 +6,12 @@ const schema = z.object({
   DISCORD_GUILD_ID:   z.string().optional(),
   DISCORD_CHANNEL_ID: z.string().optional(),
 
-  MC_HOST:          z.string().default("minecraft.railway.internal"),
-  MC_PORT:          z.string().default("25565"),
-  MC_RCON_HOST:     z.string().optional(),
-  MC_RCON_PORT:     z.string().default("25575"),
-  MC_RCON_PASSWORD: z.string().optional(),
+  MC_HOST:            z.string().default("minecraft.railway.internal"),
+  MC_PORT:            z.string().default("25565"),
+  MC_RCON_HOST:       z.string().optional(),
+  MC_RCON_PORT:       z.string().default("25575"),
+  MC_RCON_PASSWORD:   z.string().optional(),
+  MC_RESTORE_PORT:    z.string().default("8081"),
 
   // ── Railway API integration (all optional) ────────────────────────────────
   // When present, /start, /stop and /restart make direct Railway API calls to

@@ -11,6 +11,7 @@ import { sayCommand, handleSay } from "./say.ts";
 import { cmdCommand, handleCmd } from "./cmd.ts";
 import { backupCommand, handleBackup } from "./backup.ts";
 import { opCommand, handleOp } from "./op.ts";
+import { restoreCommand, handleRestore } from "./restore.ts";
 
 export const COMMANDS = [
   statusCommand,
@@ -22,6 +23,7 @@ export const COMMANDS = [
   cmdCommand,
   backupCommand,
   opCommand,
+  restoreCommand,
 ];
 
 export async function handleCommand(interaction: Interaction): Promise<void> {
@@ -51,6 +53,7 @@ export async function handleCommand(interaction: Interaction): Promise<void> {
         case "cmd":     return await handleCmd(i);
         case "backup":  return await handleBackup(i);
         case "op":      return await handleOp(i);
+        case "restore": return await handleRestore(i);
       }
     } catch (error) {
       console.error(`Unhandled error in /${i.commandName}:`, error);

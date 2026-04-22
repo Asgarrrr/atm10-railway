@@ -183,6 +183,44 @@ export const messages = {
     },
   },
 
+  // ── /restore ───────────────────────────────────────────────────────────────
+  restore: {
+    apiError: {
+      title: "API indisponible",
+      description: "Impossible de joindre l'API de restauration du serveur. Vérifie que le conteneur MC tourne.",
+    },
+    noBackups: {
+      title: "Aucune backup disponible",
+      description: "Il n'y a pas encore de backup sur le serveur.",
+    },
+    confirm: {
+      title: "Restaurer l'inventaire ?",
+      description: (player: string, backup: string) =>
+        `L'inventaire de **${player}** sera remplacé par celui de la backup \`${backup}\`.\nL'inventaire actuel sera sauvegardé en \`.pre-restore\`.`,
+      confirmButton: "Restaurer",
+      cancelButton: "Annuler",
+      fields: {
+        latest: "Dernière backup",
+        available: "Backups disponibles",
+      },
+    },
+    cancelled: { title: "Annulé", description: "La restauration a été annulée." },
+    expired: { title: "Annulé", description: "Temps de confirmation écoulé." },
+    inProgress: {
+      title: "Restauration en cours",
+      description: (player: string) => `Restauration de l'inventaire de **${player}**...`,
+    },
+    success: {
+      title: "Inventaire restauré",
+      description: (player: string, backup: string) =>
+        `L'inventaire de **${player}** a été restauré depuis \`${backup}\`. Le joueur peut se reconnecter.`,
+    },
+    failed: {
+      title: "Échec de la restauration",
+      description: "Une erreur s'est produite :",
+    },
+  },
+
   // ── Commun ─────────────────────────────────────────────────────────────────
   common: {
     internalError: {
