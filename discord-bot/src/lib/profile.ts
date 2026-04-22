@@ -119,6 +119,28 @@ export interface ProfileRenown {
   stars: string;
 }
 
+export interface ProfileAxis {
+  key: "systems" | "exploration" | "combat" | "resilience";
+  label: string;
+  icon: string;
+  score: number;
+}
+
+export interface ProfileArchetype {
+  name: string;
+  focus: string;
+  stance: string;
+}
+
+export interface ProfileMilestone {
+  label: string;
+  icon: string;
+  current: number;
+  target: number;
+  remaining: number;
+  formatter: (value: number) => string;
+}
+
 function hoursPlayed(profile: PlayerProfile): number {
   return profile.stats.play_time_ticks / 20 / 3600;
 }
@@ -130,45 +152,20 @@ function clamp(value: number, min: number, max: number): number {
 export function profileTitle(profile: PlayerProfile): string {
   const hours = hoursPlayed(profile);
 
-  if (profile.stats.completed_advancements >= 240) return "Grand archiviste";
+  if (profile.stats.completed_advancements >= 250) return "Grand archiviste";
   if (profile.stats.completed_advancements >= 120) return "Archiviste du monde";
   if (profile.stats.mob_kills >= 1_500) return "Fléau d'Eternia";
   if (profile.stats.mob_kills >= 750) return "Pourfendeur de monstres";
-  if (profile.stats.blocks_mined >= 50_000) return "Briseur de pierre";
-  if (profile.stats.distance_cm >= 6_000_000) return "Grand voyageur";
+  if (profile.stats.blocks_mined >= 25_000) return "Briseur de pierre";
+  if (profile.stats.distance_cm >= 7_500_000) return "Grand voyageur";
   if (profile.stats.deaths >= 25) return "Âme revenue";
   if (hours >= 48) return "Vétéran d'Eternia";
   return "Aventurier";
 }
 
 export function profileSummary(profile: PlayerProfile): string {
-  const stats = profile.stats;
-
-  if (stats.completed_advancements >= 240) {
-    return "Les archives d'Eternia le citent déjà parmi ceux qui ouvrent le modpack chapitre après chapitre.";
-  }
-  if (stats.completed_advancements >= 120) {
-    return "Chaque système exploré ajoute une nouvelle page au Livre du Monde.";
-  }
-  if (stats.mob_kills >= 1_500) {
-    return "Traverse les zones hostiles comme d'autres traversent leur propre base.";
-  }
-  if (stats.mob_kills >= 750) {
-    return "A taillé sa réputation dans les donjons, les ruines et les nuits sans fin.";
-  }
-  if (stats.blocks_mined >= 50_000) {
-    return "A retourné la terre et la roche jusqu'à faire plier le monde.";
-  }
-  if (stats.distance_cm >= 6_000_000) {
-    return "A déjà traversé assez de terrain pour donner un nom à chaque horizon du serveur.";
-  }
-  if (stats.deaths >= 25) {
-    return "Tombe parfois, revient toujours, et finit quand même par avancer.";
-  }
-  if (hoursPlayed(profile) >= 48) {
-    return "Son passage commence à compter dans la mémoire longue du serveur.";
-  }
-  return "Continue d'écrire sa propre chronique dans le monde.";
+  const archetype = profileArchetype(profile);
+  return `${archetype.name} • ${archetype.stance}`;
 }
 
 export function profileBadges(profile: PlayerProfile): ProfileBadge[] {
@@ -179,49 +176,49 @@ export function profileBadges(profile: PlayerProfile): ProfileBadge[] {
     badges.push({
       label: "Archiviste",
       icon: "📚",
-      flavor: "A déjà ouvert une large part des systèmes majeurs du modpack.",
+      flavor: "Déverrouille les systèmes plus vite qu'il n'installe une routine.",
     });
   }
   if (profile.stats.mob_kills >= 750) {
     badges.push({
       label: "Fléau nocturne",
       icon: "⚔️",
-      flavor: "Les expéditions hostiles laissent derrière elles une vraie traînée de mobs vaincus.",
+      flavor: "Quand il sort, les zones hostiles le remarquent.",
     });
   }
   if (profile.stats.blocks_mined >= 25_000) {
     badges.push({
       label: "Mineur abyssal",
       icon: "⛏️",
-      flavor: "A passé assez de temps sous terre pour faire parler la roche.",
+      flavor: "Passe assez de temps sous terre pour faire parler la roche.",
     });
   }
-  if (profile.stats.distance_cm >= 6_000_000) {
+  if (profile.stats.distance_cm >= 7_500_000) {
     badges.push({
       label: "Traceur d'horizons",
       icon: "🧭",
-      flavor: "Son pas a déjà laissé une empreinte durable sur les routes du serveur.",
+      flavor: "Laisse une vraie empreinte sur les routes du serveur.",
     });
   }
   if (profile.stats.jumps >= 8_000) {
     badges.push({
       label: "Jambes sans repos",
       icon: "🪽",
-      flavor: "Impossible de le garder immobile quand il y a quelque chose à découvrir.",
+      flavor: "Impossible de le garder immobile quand il y a quelque chose à ouvrir.",
     });
   }
   if (hours >= 48) {
     badges.push({
       label: "Vétéran d'Eternia",
       icon: "👑",
-      flavor: "Son temps de jeu suffit déjà à le ranger parmi les figures installées du monde.",
+      flavor: "Assez d'heures pour compter dans la mémoire longue du serveur.",
     });
   }
   if (profile.stats.deaths >= 25) {
     badges.push({
       label: "Âme tenace",
       icon: "🛡️",
-      flavor: "Tombe, revient, repart : la chronique n'aime pas l'effacer.",
+      flavor: "Tombe, revient, repart. La chute ne change pas la direction.",
     });
   }
 
@@ -277,38 +274,41 @@ export function profileKillDeathRatio(profile: PlayerProfile): number | null {
 }
 
 export function profileCardTitle(name: string): string {
-  return /^[AEIOUYaeiouy]/.test(name) ? `Annales d'${name}` : `Annales de ${name}`;
+  return `${name} // Dossier d'aventure`;
 }
 
 export function profileChronicle(profile: PlayerProfile): string[] {
-  const renown = profileRenown(profile);
-  const lines = [
-    `Porte le titre de **${profileTitle(profile)}** avec une renommée **${renown.tier.toLowerCase()}** dans le Livre du Monde.`,
-    dominantFeat(profile),
-    resilienceLine(profile),
-    `Son rythme actuel atteint **${formatDistance(profileDistancePerHour(profile))} / h** et **${formatDecimal(profileAdvancementsPerHour(profile))} advancements / h**.`,
-  ];
+  const archetype = profileArchetype(profile);
+  const notes = profileFieldNotes(profile);
+  const milestone = profileNextMilestone(profile);
 
-  return lines;
+  return [
+    `Lecture dominante : **${archetype.name}**. ${archetype.stance}`,
+    dominantFeat(profile),
+    notes[2] ?? resilienceLine(profile),
+    milestone
+      ? `Prochaine bascule : **${milestone.label}** dans ${milestone.formatter(milestone.remaining)}.`
+      : "Aucune bascule proche : le profil est déjà très haut dans plusieurs axes.",
+  ];
 }
 
 function dominantFeat(profile: PlayerProfile): string {
   const candidates = [
     {
       score: profile.stats.completed_advancements * 2.5,
-      line: `A déjà validé **${formatNumber(profile.stats.completed_advancements)}** advancements, de quoi ouvrir une vraie place dans les archives.`,
+      line: `Son point fort reste le déverrouillage : **${formatNumber(profile.stats.completed_advancements)}** advancements déjà tombés.`,
     },
     {
       score: profile.stats.mob_kills,
-      line: `A laissé **${formatNumber(profile.stats.mob_kills)}** créatures hostiles derrière lui au fil des expéditions.`,
+      line: `Le front monte vite : **${formatNumber(profile.stats.mob_kills)}** créatures hostiles déjà sorties du tableau.`,
     },
     {
       score: profile.stats.distance_cm / 10_000,
-      line: `A parcouru **${formatDistance(profile.stats.distance_cm)}** et continue d'étendre son territoire connu.`,
+      line: `Son terrain de jeu reste large : **${formatDistance(profile.stats.distance_cm)}** déjà couverts.`,
     },
     {
       score: profile.stats.blocks_mined / 10,
-      line: `A déjà extrait **${formatNumber(profile.stats.blocks_mined)}** blocs, assez pour marquer profondément le terrain.`,
+      line: `La matière suit : **${formatNumber(profile.stats.blocks_mined)}** blocs déjà extraits.`,
     },
   ];
 
@@ -333,4 +333,220 @@ function resilienceLine(profile: PlayerProfile): string {
   }
 
   return "Sa chronique reste encore ouverte, mais le ton est déjà donné.";
+}
+
+export function profileAxes(profile: PlayerProfile): ProfileAxis[] {
+  const ratio = profileKillDeathRatio(profile) ?? 0;
+  const hours = hoursPlayed(profile);
+
+  const axes: ProfileAxis[] = [
+    {
+      key: "systems",
+      label: "Systèmes",
+      icon: "📚",
+      score: Math.round(clamp(
+        Math.min(52, profile.stats.completed_advancements / 5)
+          + Math.min(24, profile.stats.blocks_mined / 1_500)
+          + Math.min(24, hours * 0.9),
+        0,
+        100,
+      )),
+    },
+    {
+      key: "exploration",
+      label: "Exploration",
+      icon: "🧭",
+      score: Math.round(clamp(
+        Math.min(44, profile.stats.distance_cm / 220_000)
+          + Math.min(22, profile.stats.jumps / 420)
+          + Math.min(34, profile.stats.completed_advancements / 7),
+        0,
+        100,
+      )),
+    },
+    {
+      key: "combat",
+      label: "Combat",
+      icon: "⚔️",
+      score: Math.round(clamp(
+        Math.min(58, profile.stats.mob_kills / 18)
+          + Math.min(18, profile.stats.player_kills * 10)
+          + Math.min(24, ratio * 4),
+        0,
+        100,
+      )),
+    },
+    {
+      key: "resilience",
+      label: "Résilience",
+      icon: "🛡️",
+      score: Math.round(clamp(
+        Math.min(34, profile.stats.deaths * 1.1)
+          + Math.min(34, hours * 0.85)
+          + Math.min(32, ratio * 3),
+        0,
+        100,
+      )),
+    },
+  ];
+
+  return axes.sort((left, right) => right.score - left.score);
+}
+
+export function profileArchetype(profile: PlayerProfile): ProfileArchetype {
+  const [first, second] = profileAxes(profile);
+  const pair = `${first?.key ?? "systems"}:${second?.key ?? "exploration"}`;
+
+  switch (pair) {
+    case "systems:exploration":
+    case "exploration:systems":
+      return {
+        name: "Chasseur d'archives",
+        focus: "Systèmes / Exploration",
+        stance: "Déverrouille large, explore vite, et préfère ouvrir des possibilités plutôt que boucler une seule routine.",
+      };
+    case "combat:exploration":
+    case "exploration:combat":
+      return {
+        name: "Éclaireur de front",
+        focus: "Exploration / Combat",
+        stance: "Avance par zones, dimensions et affrontements. Le terrain et le danger vont ensemble.",
+      };
+    case "combat:resilience":
+    case "resilience:combat":
+      return {
+        name: "Briseur de ligne",
+        focus: "Combat / Résilience",
+        stance: "Encaisse, repart, et transforme la pression en progression.",
+      };
+    case "systems:resilience":
+    case "resilience:systems":
+      return {
+        name: "Ingénieur tenace",
+        focus: "Systèmes / Résilience",
+        stance: "Préfère les boucles solides, les setups durables et les retours propres après l'échec.",
+      };
+    case "systems:combat":
+    case "combat:systems":
+      return {
+        name: "Conquérant de systèmes",
+        focus: "Systèmes / Combat",
+        stance: "Monte en puissance par l'ouverture de contenu, puis l'impose sur le terrain.",
+      };
+    case "exploration:resilience":
+    case "resilience:exploration":
+      return {
+        name: "Marcheur obstiné",
+        focus: "Exploration / Résilience",
+        stance: "Va loin, tombe parfois, mais ne coupe presque jamais sa trajectoire.",
+      };
+    default:
+      return {
+        name: "Aventurier composite",
+        focus: `${first?.label ?? "Progression"} / ${second?.label ?? "Lecture"}`,
+        stance: "Ne rentre pas encore dans une seule case nette, ce qui est souvent bon signe sur un modpack large.",
+      };
+  }
+}
+
+export function profileFieldNotes(profile: PlayerProfile): string[] {
+  const archetype = profileArchetype(profile);
+  const advRate = profileAdvancementsPerHour(profile);
+  const distanceRate = profileDistancePerHour(profile);
+  const deathsPerHour = hoursPlayed(profile) <= 0 ? 0 : profile.stats.deaths / hoursPlayed(profile);
+  const ratio = profileKillDeathRatio(profile);
+
+  const notes = [
+    `Focus principal : **${archetype.focus}**.`,
+    advRate >= 10
+      ? "Cadence forte : le profil débloque de nouveaux pans du modpack à un rythme soutenu."
+      : advRate >= 5
+        ? "Cadence solide : la progression avance régulièrement sans se disperser."
+        : "Cadence posée : la progression prend son temps et capitalise sur la durée.",
+    distanceRate >= 800_000
+      ? "Mobilité élevée : il couvre du terrain vite et transforme le mouvement en progression."
+      : distanceRate >= 350_000
+        ? "Mobilité stable : il explore assez pour garder le monde ouvert autour de lui."
+        : "Ancrage fort : le profil progresse davantage par installation que par grands déplacements.",
+  ];
+
+  if (ratio !== null && ratio >= 18) {
+    notes.push("Lecture de risque : très agressif, mais rarement gratuit. Le combat reste rentable.");
+  } else if (deathsPerHour >= 2) {
+    notes.push("Lecture de risque : accepte clairement la chute comme coût normal d'avancée.");
+  } else if (profile.stats.deaths === 0) {
+    notes.push("Lecture de risque : propre. Rien n'indique une prise de risque mal calibrée.");
+  } else {
+    notes.push("Lecture de risque : mesuré. L'échec existe, mais il ne dicte pas le rythme.");
+  }
+
+  return notes;
+}
+
+export function profileNextMilestone(profile: PlayerProfile): ProfileMilestone | null {
+  const thresholds: ProfileMilestone[] = [
+    {
+      label: "300 advancements",
+      icon: "📚",
+      current: profile.stats.completed_advancements,
+      target: 300,
+      remaining: Math.max(0, 300 - profile.stats.completed_advancements),
+      formatter: (value) => `${formatNumber(value)} advancements`,
+    },
+    {
+      label: "1 000 mobs éliminés",
+      icon: "⚔️",
+      current: profile.stats.mob_kills,
+      target: 1_000,
+      remaining: Math.max(0, 1_000 - profile.stats.mob_kills),
+      formatter: (value) => `${formatNumber(value)} mobs`,
+    },
+    {
+      label: "75 km de terrain couvert",
+      icon: "🧭",
+      current: profile.stats.distance_cm,
+      target: 7_500_000,
+      remaining: Math.max(0, 7_500_000 - profile.stats.distance_cm),
+      formatter: (value) => formatDistance(value),
+    },
+    {
+      label: "1 000 blocs minés",
+      icon: "⛏️",
+      current: profile.stats.blocks_mined,
+      target: 1_000,
+      remaining: Math.max(0, 1_000 - profile.stats.blocks_mined),
+      formatter: (value) => `${formatNumber(value)} blocs`,
+    },
+    {
+      label: "9 000 sauts",
+      icon: "🪽",
+      current: profile.stats.jumps,
+      target: 9_000,
+      remaining: Math.max(0, 9_000 - profile.stats.jumps),
+      formatter: (value) => `${formatNumber(value)} sauts`,
+    },
+    {
+      label: "48 heures de campagne",
+      icon: "👑",
+      current: hoursPlayed(profile),
+      target: 48,
+      remaining: Math.max(0, 48 - hoursPlayed(profile)),
+      formatter: (value) => `${formatDecimal(value)} h`,
+    },
+  ];
+
+  const pending = thresholds
+    .filter((item) => item.current < item.target)
+    .sort((left, right) => (left.remaining / left.target) - (right.remaining / right.target));
+
+  return pending[0] ?? null;
+}
+
+export function profileMeter(score: number, size = 10): string {
+  const filled = clamp(Math.round((score / 100) * size), 0, size);
+  return `${"█".repeat(filled)}${"░".repeat(size - filled)}`;
+}
+
+export function profilePortraitUrl(uuid: string, size = 128): string {
+  return `https://mc-heads.net/avatar/${uuid}/${size}`;
 }

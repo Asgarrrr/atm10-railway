@@ -22,11 +22,15 @@ import {
   formatPlayTime,
   isProfileNotFound,
   profileAdvancementsPerHour,
+  profileArchetype,
+  profileAxes,
   profileBadges,
-  profileCardTitle,
   profileChronicle,
   profileDistancePerHour,
   profileKillDeathRatio,
+  profileMeter,
+  profileNextMilestone,
+  profilePortraitUrl,
   profileRenown,
   profileSummary,
   profileTitle,
@@ -42,25 +46,25 @@ const PROFILE_PAGE_META: Record<
   { icon: string; author: string; footer: string; buttonLabel: string; color: number }
 > = {
   overview: {
-    icon: "🧭",
-    author: "Livre du Monde",
-    footer: "Vue d'ensemble",
-    buttonLabel: "Vue",
-    color: 0x3b82f6,
+    icon: "✦",
+    author: "Identité",
+    footer: "Identité",
+    buttonLabel: "Aura",
+    color: 0x2563eb,
   },
   stats: {
     icon: "⚔️",
-    author: "Registre de campagne",
-    footer: "Stats",
-    buttonLabel: "Stats",
-    color: 0xf97316,
+    author: "Registre brut",
+    footer: "Registre brut",
+    buttonLabel: "Registre",
+    color: 0xea580c,
   },
   legend: {
     icon: "📜",
-    author: "Annales d'Eternia",
-    footer: "Légende",
-    buttonLabel: "Légende",
-    color: 0xeab308,
+    author: "Lecture de style",
+    footer: "Lecture de style",
+    buttonLabel: "Lecture",
+    color: 0xca8a04,
   },
 };
 
@@ -175,6 +179,9 @@ function buildProfileEmbed(data: PlayerProfile, page: ProfilePage, note?: string
   const summary = profileSummary(data);
   const badges = profileBadges(data);
   const renown = profileRenown(data);
+  const archetype = profileArchetype(data);
+  const axes = profileAxes(data);
+  const milestone = profileNextMilestone(data);
   const pageMeta = PROFILE_PAGE_META[page];
   const distinctions = badges.length > 0
     ? badges.map((badge) => `${badge.icon} ${badge.label}`).join(" • ")
@@ -182,54 +189,64 @@ function buildProfileEmbed(data: PlayerProfile, page: ProfilePage, note?: string
 
   const e = new EmbedBuilder()
     .setColor(pageMeta.color)
-    .setAuthor({ name: `${pageMeta.icon} ${pageMeta.author}` })
-    .setTitle(profileCardTitle(data.name))
-    .setDescription([
-      `**${title}**`,
-      `${renown.stars} **${renown.tier}** • Score de renommée **${renown.score}/100**`,
-      summary,
-      "",
-      `**Distinctions**`,
-      distinctions,
-    ].join("\n"))
-    .setFooter({ text: `Archives d'Eternia • ${pageMeta.footer} (${PROFILE_PAGES.indexOf(page) + 1}/${PROFILE_PAGES.length})` });
+    .setAuthor({ name: `${pageMeta.icon} ${pageMeta.author}`, iconURL: profilePortraitUrl(data.uuid, 64) })
+    .setTitle(`${data.name} // ${archetype.name}`)
+    .setThumbnail(profilePortraitUrl(data.uuid, 128))
+    .setFooter({ text: `Profil d'aventure • ${pageMeta.footer} (${PROFILE_PAGES.indexOf(page) + 1}/${PROFILE_PAGES.length})` });
 
   if (data.last_saved_at) {
     e.setTimestamp(new Date(data.last_saved_at));
   }
 
   if (page === "overview") {
+    e.setDescription([
+      `**${title}**`,
+      `${renown.stars} **${renown.tier}** • ${summary}`,
+      `Focus: **${archetype.focus}**`,
+    ].join("\n"));
+
     return e.addFields(
       {
-        name: "✦ Présence",
+        name: "✦ Signature",
         value: [
-          `**${profile.fields.playTime}**\n${formatPlayTime(data.stats.play_time_ticks)}`,
+          `**Titre**\n${title}`,
+          `**Archetype**\n${archetype.name}`,
+          `**Renommée**\n${renown.tier} (${renown.score}/100)`,
+        ].join("\n"),
+        inline: true,
+      },
+      {
+        name: "✦ Fenêtre active",
+        value: [
           `**${profile.fields.lastSaved}**\n${formatDiscordTimestamp(data.last_saved_at)}`,
+          `**${profile.fields.playTime}**\n${formatPlayTime(data.stats.play_time_ticks)}`,
+          `**Cadence**\n${formatDecimal(profileAdvancementsPerHour(data))} adv/h`,
         ].join("\n"),
         inline: true,
       },
       {
-        name: "✦ Influence",
+        name: "✦ Prochaine bascule",
         value: [
-          `**${profile.fields.advancements}**\n${formatNumber(data.stats.completed_advancements)}`,
-          `**${profile.fields.distance}**\n${formatDistance(data.stats.distance_cm)}`,
-          `**${profile.fields.blocksMined}**\n${formatNumber(data.stats.blocks_mined)}`,
+          milestone
+            ? `${milestone.icon} **${milestone.label}**`
+            : "Aucune bascule proche",
+          milestone
+            ? `${profileMeter(Math.round((milestone.current / milestone.target) * 100))} ${Math.round((milestone.current / milestone.target) * 100)}%`
+            : "██████████ 100%",
+          milestone
+            ? `Encore **${milestone.formatter(milestone.remaining)}**`
+            : "Le profil est déjà haut sur plusieurs seuils.",
         ].join("\n"),
         inline: true,
       },
       {
-        name: "✦ Aura",
-        value: [
-          `**${profile.fields.rank}**\n${title}`,
-          `**Renommée**\n${renown.tier}`,
-          `**Éclat**\n${renown.stars}`,
-        ].join("\n"),
-        inline: true,
+        name: "✦ Lecture rapide",
+        value: profileChronicle(data).slice(0, 3).map((line) => `• ${line}`).join("\n"),
       },
       {
-        name: "✦ Distinctions gravées",
+        name: "✦ Distinctions en vitrine",
         value: badges.length > 0
-          ? badges.map((badge) => `${badge.icon} **${badge.label}**`).join("\n")
+          ? badges.slice(0, 4).map((badge) => `${badge.icon} **${badge.label}**`).join("\n")
           : profile.noBadges,
       },
       ...(note ? [{ name: profile.fields.note, value: note }] : []),
@@ -237,6 +254,8 @@ function buildProfileEmbed(data: PlayerProfile, page: ProfilePage, note?: string
   }
 
   if (page === "stats") {
+    e.setDescription("Registre brut. Ici, pas de roman: uniquement les compteurs qui structurent la campagne.");
+
     return e.addFields(
       statPanel("⚔️ Registre de combat", [
         [profile.labels.mobKills, formatNumber(data.stats.mob_kills)],
@@ -254,33 +273,41 @@ function buildProfileEmbed(data: PlayerProfile, page: ProfilePage, note?: string
         [profile.labels.playTime, formatPlayTime(data.stats.play_time_ticks)],
         [profile.labels.advancements, formatNumber(data.stats.completed_advancements)],
         ["Adv. / heure", formatDecimal(profileAdvancementsPerHour(data))],
-        ["Rang", renown.tier],
+        ["Renommée", `${renown.tier} ${renown.score}/100`],
       ]),
       {
-        name: "✦ Identité du voyageur",
-        value: `\`${data.uuid}\``,
+        name: "✦ Lecture chiffrée",
+        value: [
+          `**Distance / heure**: ${formatDistance(profileDistancePerHour(data))}`,
+          `**Kills / mort**: ${formatKillDeathRatio(data)}`,
+          `**UUID**: \`${data.uuid}\``,
+        ].join("\n"),
       },
     );
   }
 
+  e.setDescription("Lecture de style. Cette page évite les chiffres bruts et essaie de dire comment le joueur avance réellement.");
+
   return e.addFields(
     {
-      name: "🏅 Distinctions gravées",
+      name: "📈 Carte des axes",
+      value: `\`\`\`\n${axes.map((axis) => `${axis.icon} ${axis.label.padEnd(12)} ${profileMeter(axis.score)} ${String(axis.score).padStart(3)}`).join("\n")}\n\`\`\``,
+    },
+    {
+      name: "🧠 Notes du scribe",
+      value: profileChronicle(data).map((line) => `• ${line}`).join("\n"),
+    },
+    {
+      name: "🏅 Distinctions",
       value: badges.length > 0
         ? badges.map((badge) => `${badge.icon} **${badge.label}** — ${badge.flavor}`).join("\n")
         : profile.legend.noBadges,
     },
     {
-      name: "📜 Extrait des annales",
-      value: profileChronicle(data).map((line) => `> ${line}`).join("\n"),
-    },
-    {
-      name: "🗺️ Repères de campagne",
-      value: [
-        `**${profile.labels.blocksMined}**\n${formatNumber(data.stats.blocks_mined)}`,
-        `**${profile.labels.jumps}**\n${formatNumber(data.stats.jumps)}`,
-        `**${profile.labels.lastSaved}**\n${formatDiscordTimestamp(data.last_saved_at)}`,
-      ].join("\n"),
+      name: "🎯 Point de tension",
+      value: milestone
+        ? `${milestone.icon} **${milestone.label}**\nEncore ${milestone.formatter(milestone.remaining)} avant le prochain palier visible.`
+        : "Le profil n'a pas de palier proche évident pour l'instant.",
     },
   );
 }
