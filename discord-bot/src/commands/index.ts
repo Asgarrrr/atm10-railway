@@ -7,7 +7,7 @@ import { startCommand, handleStart, runStartFlow } from "./start.ts";
 import { stopCommand, handleStop, runStopFlow } from "./stop.ts";
 import { restartCommand, handleRestart, runRestartFlow } from "./restart.ts";
 import { playersCommand, handlePlayers } from "./players.ts";
-import { profileCommand, handleProfile } from "./profile.ts";
+import { profileCommand, profileContextCommand, handleProfile, handleProfileButton, handleProfileContextMenu } from "./profile.ts";
 import { sayCommand, handleSay } from "./say.ts";
 import { cmdCommand, handleCmd } from "./cmd.ts";
 import { backupCommand, handleBackup } from "./backup.ts";
@@ -21,6 +21,7 @@ export const COMMANDS = [
   restartCommand,
   playersCommand,
   profileCommand,
+  profileContextCommand,
   sayCommand,
   cmdCommand,
   backupCommand,
@@ -68,10 +69,31 @@ export async function handleCommand(interaction: Interaction): Promise<void> {
     return;
   }
 
+  if (interaction.isUserContextMenuCommand()) {
+    const i = interaction;
+    try {
+      switch (i.commandName) {
+        case "Minecraft Profile": return await handleProfileContextMenu(i);
+      }
+    } catch (error) {
+      console.error(`Unhandled error in context menu ${i.commandName}:`, error);
+      const { internalError } = messages.common;
+      const fallback = { embeds: [embed.error(internalError.title, internalError.description)] };
+      if (i.deferred || i.replied) await i.editReply(fallback).catch(() => undefined);
+      else await i.reply({ ...fallback, ephemeral: true }).catch(() => undefined);
+    }
+    return;
+  }
+
   // ── Panel buttons from /status ──────────────────────────────────────────────
   if (interaction.isButton()) {
     const btn = interaction;
     try {
+      if (btn.customId.startsWith("profile:")) {
+        await handleProfileButton(btn);
+        return;
+      }
+
       switch (btn.customId) {
         case "panel:start": {
           await btn.deferReply();

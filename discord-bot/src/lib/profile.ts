@@ -25,6 +25,11 @@ class ProfileApiError extends Error {
   }
 }
 
+export interface CandidateProfileMatch {
+  profile: PlayerProfile;
+  candidate: string;
+}
+
 function restoreApiBase(): string {
   return `http://${env.MC_HOST}:${env.MC_RESTORE_PORT}`;
 }
@@ -45,6 +50,25 @@ export async function fetchProfile(player: string): Promise<PlayerProfile> {
 
 export function isProfileNotFound(error: unknown): boolean {
   return error instanceof ProfileApiError && error.status === 404;
+}
+
+export async function fetchProfileFromCandidates(candidates: string[]): Promise<CandidateProfileMatch | null> {
+  const tried = new Set<string>();
+
+  for (const candidate of candidates) {
+    const normalized = candidate.trim();
+    if (!normalized || tried.has(normalized)) continue;
+    tried.add(normalized);
+
+    try {
+      const profile = await fetchProfile(normalized);
+      return { profile, candidate: normalized };
+    } catch (error) {
+      if (!isProfileNotFound(error)) throw error;
+    }
+  }
+
+  return null;
 }
 
 export function formatPlayTime(ticks: number): string {
@@ -110,4 +134,19 @@ export function profileSummary(profile: PlayerProfile): string {
     return "Tombe souvent, revient toujours, et finit quand même par avancer.";
   }
   return "Continue d'écrire sa propre chronique dans le monde.";
+}
+
+export function profileBadges(profile: PlayerProfile): string[] {
+  const hours = profile.stats.play_time_ticks / 20 / 3600;
+  const badges: string[] = [];
+
+  if (profile.stats.completed_advancements >= 120) badges.push("Archivist");
+  if (profile.stats.mob_kills >= 1000) badges.push("Monster Slayer");
+  if (profile.stats.blocks_mined >= 50_000) badges.push("Deep Miner");
+  if (profile.stats.distance_cm >= 50_000_000) badges.push("Trailblazer");
+  if (profile.stats.jumps >= 10_000) badges.push("Restless Legs");
+  if (hours >= 72) badges.push("World Veteran");
+  if (profile.stats.deaths >= 40) badges.push("Stubborn Soul");
+
+  return badges;
 }
