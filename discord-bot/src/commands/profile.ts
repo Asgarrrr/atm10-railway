@@ -13,7 +13,6 @@ import {
 } from "discord.js";
 import { messages } from "../messages.ts";
 import {
-  formatDecimal,
   fetchProfile,
   fetchProfileFromCandidates,
   formatDiscordTimestamp,
@@ -21,50 +20,31 @@ import {
   formatNumber,
   formatPlayTime,
   isProfileNotFound,
-  profileAdvancementsPerHour,
-  profileArchetype,
-  profileAxes,
-  profileBadges,
-  profileChronicle,
-  profileDistancePerHour,
-  profileKillDeathRatio,
-  profileMeter,
-  profileNextMilestone,
   profilePortraitUrl,
-  profileRenown,
-  profileSummary,
-  profileTitle,
   type PlayerProfile,
 } from "../lib/profile.ts";
 import { embed } from "./_shared.ts";
 
-type ProfilePage = "overview" | "stats" | "legend";
+type ProfilePage = "overview" | "stats";
 
-const PROFILE_PAGES: ProfilePage[] = ["overview", "stats", "legend"];
+const PROFILE_PAGES: ProfilePage[] = ["overview", "stats"];
 const PROFILE_PAGE_META: Record<
   ProfilePage,
   { icon: string; author: string; footer: string; buttonLabel: string; color: number }
 > = {
   overview: {
     icon: "👤",
-    author: "Identité",
-    footer: "Identité",
-    buttonLabel: "Aura",
+    author: "Résumé",
+    footer: "Résumé",
+    buttonLabel: "Résumé",
     color: 0x2563eb,
   },
   stats: {
-    icon: "⚔️",
-    author: "Registre brut",
-    footer: "Registre brut",
-    buttonLabel: "Registre",
-    color: 0xea580c,
-  },
-  legend: {
-    icon: "📜",
-    author: "Lecture de style",
-    footer: "Lecture de style",
-    buttonLabel: "Lecture",
-    color: 0xca8a04,
+    icon: "📊",
+    author: "Statistiques",
+    footer: "Statistiques",
+    buttonLabel: "Stats",
+    color: 0x0f766e,
   },
 };
 
@@ -177,140 +157,86 @@ async function replyWithProfile(
 
 function buildProfileEmbed(data: PlayerProfile, page: ProfilePage, note?: string) {
   const { profile } = messages;
-  const title = profileTitle(data);
-  const summary = profileSummary(data);
-  const badges = profileBadges(data);
-  const renown = profileRenown(data);
-  const archetype = profileArchetype(data);
-  const axes = profileAxes(data);
-  const milestone = profileNextMilestone(data);
   const pageMeta = PROFILE_PAGE_META[page];
-  const distinctions = badges.length > 0
-    ? badges.map((badge) => `${badge.icon} ${badge.label}`).join(" • ")
-    : profile.noBadges;
 
   const e = new EmbedBuilder()
     .setColor(pageMeta.color)
     .setAuthor({ name: `${pageMeta.icon} ${pageMeta.author}`, iconURL: profilePortraitUrl(data.uuid, 64) })
-    .setTitle(`${data.name} // ${archetype.name}`)
+    .setTitle(data.name)
     .setThumbnail(profilePortraitUrl(data.uuid, 128))
-    .setFooter({ text: `Profil d'aventure • ${pageMeta.footer} (${PROFILE_PAGES.indexOf(page) + 1}/${PROFILE_PAGES.length})` });
+    .setFooter({ text: `Profil joueur • ${pageMeta.footer} (${PROFILE_PAGES.indexOf(page) + 1}/${PROFILE_PAGES.length})` });
 
   if (data.last_saved_at) {
     e.setTimestamp(new Date(data.last_saved_at));
   }
 
   if (page === "overview") {
-    e.setDescription([
-      `**${title}**`,
-      `${renown.stars} **${renown.tier}** • ${summary}`,
-      `Focus: **${archetype.focus}**`,
-    ].join("\n"));
+    e.setDescription("Vue synthétique des compteurs du joueur.");
 
     return e.addFields(
       {
-        name: "✦ Signature",
+        name: "Identité",
         value: [
-          `**Titre**\n${title}`,
-          `**Archetype**\n${archetype.name}`,
-          `**Renommée**\n${renown.tier} (${renown.score}/100)`,
+          `**Joueur**\n${data.name}`,
+          `**${profile.fields.uuid}**\n\`${data.uuid}\``,
         ].join("\n"),
         inline: true,
       },
       {
-        name: "✦ Fenêtre active",
+        name: "Activité",
         value: [
           `**${profile.fields.lastSaved}**\n${formatDiscordTimestamp(data.last_saved_at)}`,
           `**${profile.fields.playTime}**\n${formatPlayTime(data.stats.play_time_ticks)}`,
-          `**Cadence**\n${formatDecimal(profileAdvancementsPerHour(data))} adv/h`,
+          `**${profile.fields.advancements}**\n${formatNumber(data.stats.completed_advancements)}`,
         ].join("\n"),
         inline: true,
       },
       {
-        name: "✦ Prochaine bascule",
+        name: "Combat",
         value: [
-          milestone
-            ? `${milestone.icon} **${milestone.label}**`
-            : "Aucune bascule proche",
-          milestone
-            ? `${profileMeter(Math.round((milestone.current / milestone.target) * 100))} ${Math.round((milestone.current / milestone.target) * 100)}%`
-            : "██████████ 100%",
-          milestone
-            ? `Encore **${milestone.formatter(milestone.remaining)}**`
-            : "Le profil est déjà haut sur plusieurs seuils.",
+          `**${profile.fields.mobKills}**\n${formatNumber(data.stats.mob_kills)}`,
+          `**${profile.fields.playerKills}**\n${formatNumber(data.stats.player_kills)}`,
+          `**${profile.fields.deaths}**\n${formatNumber(data.stats.deaths)}`,
         ].join("\n"),
         inline: true,
       },
       {
-        name: "✦ Lecture rapide",
-        value: profileChronicle(data).slice(0, 3).map((line) => `• ${line}`).join("\n"),
-      },
-      {
-        name: "✦ Distinctions en vitrine",
-        value: badges.length > 0
-          ? badges.slice(0, 4).map((badge) => `${badge.icon} **${badge.label}**`).join("\n")
-          : profile.noBadges,
+        name: "Exploration",
+        value: [
+          `**${profile.fields.distance}**\n${formatDistance(data.stats.distance_cm)}`,
+          `**${profile.fields.blocksMined}**\n${formatNumber(data.stats.blocks_mined)}`,
+          `**${profile.fields.jumps}**\n${formatNumber(data.stats.jumps)}`,
+        ].join("\n"),
       },
       ...(note ? [{ name: profile.fields.note, value: note }] : []),
     );
   }
 
-  if (page === "stats") {
-    e.setDescription("Registre brut. Ici, pas de roman: uniquement les compteurs qui structurent la campagne.");
-
-    return e.addFields(
-      statPanel("⚔️ Registre de combat", [
-        [profile.labels.mobKills, formatNumber(data.stats.mob_kills)],
-        [profile.labels.playerKills, formatNumber(data.stats.player_kills)],
-        [profile.labels.deaths, formatNumber(data.stats.deaths)],
-        ["Kills / mort", formatKillDeathRatio(data)],
-      ]),
-      statPanel("🧭 Registre d'exploration", [
-        [profile.labels.distance, formatDistance(data.stats.distance_cm)],
-        [profile.labels.blocksMined, formatNumber(data.stats.blocks_mined)],
-        [profile.labels.jumps, formatNumber(data.stats.jumps)],
-        ["Distance / heure", formatDistance(profileDistancePerHour(data))],
-      ]),
-      statPanel("⏳ Registre de progression", [
-        [profile.labels.playTime, formatPlayTime(data.stats.play_time_ticks)],
-        [profile.labels.advancements, formatNumber(data.stats.completed_advancements)],
-        ["Adv. / heure", formatDecimal(profileAdvancementsPerHour(data))],
-        ["Renommée", `${renown.tier} ${renown.score}/100`],
-      ]),
-      {
-        name: "✦ Lecture chiffrée",
-        value: [
-          `**Distance / heure**: ${formatDistance(profileDistancePerHour(data))}`,
-          `**Kills / mort**: ${formatKillDeathRatio(data)}`,
-          `**UUID**: \`${data.uuid}\``,
-        ].join("\n"),
-      },
-    );
-  }
-
-  e.setDescription("Lecture de style. Cette page évite les chiffres bruts et essaie de dire comment le joueur avance réellement.");
+  e.setDescription("Vue brute des compteurs exposés par l'API.");
 
   return e.addFields(
+    statPanel("Combat", [
+      [profile.labels.mobKills, formatNumber(data.stats.mob_kills)],
+      [profile.labels.playerKills, formatNumber(data.stats.player_kills)],
+      [profile.labels.deaths, formatNumber(data.stats.deaths)],
+    ]),
+    statPanel("Exploration", [
+      [profile.labels.distance, `${formatDistance(data.stats.distance_cm)} (${formatNumber(data.stats.distance_cm)} cm)`],
+      [profile.labels.blocksMined, formatNumber(data.stats.blocks_mined)],
+      [profile.labels.jumps, formatNumber(data.stats.jumps)],
+    ]),
+    statPanel("Progression", [
+      [profile.labels.playTime, `${formatPlayTime(data.stats.play_time_ticks)} (${formatNumber(data.stats.play_time_ticks)} ticks)`],
+      [profile.labels.advancements, formatNumber(data.stats.completed_advancements)],
+    ]),
     {
-      name: "📈 Carte des axes",
-      value: `\`\`\`\n${axes.map((axis) => `${axis.icon} ${axis.label.padEnd(12)} ${profileMeter(axis.score)} ${String(axis.score).padStart(3)}`).join("\n")}\n\`\`\``,
+      name: "Technique",
+      value: [
+        `**${profile.labels.uuid}**: \`${data.uuid}\``,
+        `**${profile.labels.lastSaved}**: ${formatDiscordTimestamp(data.last_saved_at)}`,
+      ].join("\n"),
     },
-    {
-      name: "🧠 Notes du scribe",
-      value: profileChronicle(data).map((line) => `• ${line}`).join("\n"),
-    },
-    {
-      name: "🏅 Distinctions",
-      value: badges.length > 0
-        ? badges.map((badge) => `${badge.icon} **${badge.label}** — ${badge.flavor}`).join("\n")
-        : profile.legend.noBadges,
-    },
-    {
-      name: "🎯 Point de tension",
-      value: milestone
-        ? `${milestone.icon} **${milestone.label}**\nEncore ${milestone.formatter(milestone.remaining)} avant le prochain palier visible.`
-        : "Le profil n'a pas de palier proche évident pour l'instant.",
-    },
+    ...(note ? [{ name: profile.fields.note, value: note }] : []),
   );
 }
 
@@ -332,13 +258,6 @@ function statPanel(name: string, rows: Array<[string, string]>) {
     name,
     value: `\`\`\`\n${rows.map(([label, value]) => `${label.padEnd(width)}  ${value}`).join("\n")}\n\`\`\``,
   };
-}
-
-function formatKillDeathRatio(profile: PlayerProfile): string {
-  const ratio = profileKillDeathRatio(profile);
-  if (ratio === null) return "N/A";
-  if (profile.stats.deaths === 0) return "Sans chute";
-  return formatDecimal(ratio);
 }
 
 function buildProfileButtonId(page: ProfilePage, player: string, ownerId: string): string {
