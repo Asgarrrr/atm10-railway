@@ -118,6 +118,34 @@ export const messages = {
     noList: "La liste des joueurs n'est pas disponible.",
   },
 
+  // ── /profile ───────────────────────────────────────────────────────────────
+  profile: {
+    apiError: {
+      title: "Profil indisponible",
+      description: "Impossible de joindre les données du joueur. Vérifie que le conteneur MC tourne.",
+    },
+    notFound: {
+      title: "Joueur introuvable",
+      description: (player: string) => `Aucune donnée trouvée pour **${player}** dans le monde actuel.`,
+    },
+    title: (player: string) => `Profil de ${player}`,
+    description: (title: string, summary: string) => `**${title}**\n${summary}`,
+    fields: {
+      title: "Titre",
+      uuid: "UUID",
+      lastSaved: "Dernière sauvegarde",
+      playTime: "Temps de jeu",
+      deaths: "Morts",
+      mobKills: "Mobs tués",
+      playerKills: "Joueurs tués",
+      distance: "Distance",
+      advancements: "Advancements",
+      jumps: "Sauts",
+      blocksMined: "Blocs minés",
+    },
+    footer: "Source : stats, advancements et playerdata du monde.",
+  },
+
   // ── /say ───────────────────────────────────────────────────────────────────
   say: {
     noRcon: "Impossible d'envoyer le message — le serveur n'est pas joignable.",
@@ -165,21 +193,21 @@ export const messages = {
 
   // ── /backup ────────────────────────────────────────────────────────────────
   backup: {
-    noRcon: {
-      title: "Sauvegarde impossible",
-      description: "La connexion au serveur n'est pas configurée (`MC_RCON_PASSWORD` manquant).",
+    apiError: {
+      title: "API indisponible",
+      description: "Impossible de joindre l'API de backup du serveur. Vérifie que le conteneur MC tourne.",
     },
     saving: {
       title: "Sauvegarde en cours",
-      description: "Le monde est en train d'être écrit sur le disque...",
+      description: "Création d'une archive de backup en cours...",
     },
     success: {
-      title: "Monde sauvegardé",
-      description: "Toutes les données ont été écrites sur le disque. Le backup automatique inclura cette version.",
+      title: "Backup créée",
+      description: (backup: string) => `La backup \`${backup}\` a été créée et est disponible pour \`/restore\`.`,
     },
     error: {
       title: "Échec de la sauvegarde",
-      description: "Impossible de contacter le serveur.",
+      description: "La création de la backup a échoué :",
     },
   },
 
@@ -191,7 +219,7 @@ export const messages = {
     },
     noBackups: {
       title: "Aucune backup disponible",
-      description: "Il n'y a pas encore de backup sur le serveur.",
+      description: "Il n'y a pas encore de backup sur le serveur. Lance `/backup` ou attends le prochain backup automatique.",
     },
     confirm: {
       title: "Restaurer l'inventaire ?",

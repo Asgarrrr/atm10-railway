@@ -1,42 +1,52 @@
 import { ChatInputCommandInteraction, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import { withRcon } from "../lib/rcon.ts";
+import { env } from "../env.ts";
 import { messages } from "../messages.ts";
-import { embed, getRconConfig } from "./_shared.ts";
+import { embed } from "./_shared.ts";
 
 export const backupCommand = new SlashCommandBuilder()
   .setName("backup")
-  .setDescription("Force une sauvegarde immédiate du monde sur disque")
+  .setDescription("Crée une backup immédiate du monde")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .toJSON();
+
+function restoreApiBase(): string {
+  return `http://${env.MC_HOST}:${env.MC_RESTORE_PORT}`;
+}
+
+async function triggerBackup(): Promise<{ success: boolean; output: string; backup?: string | null }> {
+  const res = await fetch(`${restoreApiBase()}/backup`, {
+    method: "POST",
+  });
+  return res.json() as Promise<{ success: boolean; output: string; backup?: string | null }>;
+}
 
 export async function handleBackup(i: ChatInputCommandInteraction): Promise<void> {
   await i.deferReply();
 
   const { backup } = messages;
-  const cfg = getRconConfig();
-
-  if (!cfg) {
-    await i.editReply({ embeds: [embed.error(backup.noRcon.title, backup.noRcon.description)] });
-    return;
-  }
 
   await i.editReply({ embeds: [embed.info(backup.saving.title, backup.saving.description)] });
 
   try {
-    await withRcon(cfg.host, cfg.port, cfg.password, async (r) => {
-      await r.send("save-off");
-      await r.send("save-all flush");
-    });
+    const result = await triggerBackup();
 
-    // Give the server a moment to finish writing
-    await Bun.sleep(5_000);
+    if (result.success) {
+      await i.editReply({
+        embeds: [embed.success(backup.success.title, backup.success.description(result.backup ?? "inconnue"))],
+      });
+      return;
+    }
 
-    await withRcon(cfg.host, cfg.port, cfg.password, (r) => r.send("save-on"));
-
-    await i.editReply({ embeds: [embed.success(backup.success.title, backup.success.description)] });
-  } catch (err) {
     await i.editReply({
-      embeds: [embed.error(backup.error.title, err instanceof Error ? err.message : backup.error.description)],
+      embeds: [
+        embed
+          .error(backup.error.title, backup.error.description)
+          .setDescription(`\`\`\`\n${result.output.slice(0, 1800)}\n\`\`\``),
+      ],
+    });
+  } catch {
+    await i.editReply({
+      embeds: [embed.error(backup.apiError.title, backup.apiError.description)],
     });
   }
 }

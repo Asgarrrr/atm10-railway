@@ -7,6 +7,7 @@ import { startCommand, handleStart, runStartFlow } from "./start.ts";
 import { stopCommand, handleStop, runStopFlow } from "./stop.ts";
 import { restartCommand, handleRestart, runRestartFlow } from "./restart.ts";
 import { playersCommand, handlePlayers } from "./players.ts";
+import { profileCommand, handleProfile } from "./profile.ts";
 import { sayCommand, handleSay } from "./say.ts";
 import { cmdCommand, handleCmd } from "./cmd.ts";
 import { backupCommand, handleBackup } from "./backup.ts";
@@ -19,6 +20,7 @@ export const COMMANDS = [
   stopCommand,
   restartCommand,
   playersCommand,
+  profileCommand,
   sayCommand,
   cmdCommand,
   backupCommand,
@@ -49,6 +51,7 @@ export async function handleCommand(interaction: Interaction): Promise<void> {
         case "stop":    return await handleStop(i);
         case "restart": return await handleRestart(i);
         case "players": return await handlePlayers(i);
+        case "profile": return await handleProfile(i);
         case "say":     return await handleSay(i);
         case "cmd":     return await handleCmd(i);
         case "backup":  return await handleBackup(i);

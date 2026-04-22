@@ -7,6 +7,7 @@ RUN bun install --frozen-lockfile
 
 COPY tsconfig.json ./
 COPY src ./src
+RUN [ -f src/messages.ts ] || cp src/messages.example.ts src/messages.ts
 
 RUN bun build ./src/index.ts --compile --outfile=bot
 

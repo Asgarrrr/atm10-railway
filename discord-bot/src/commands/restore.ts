@@ -64,8 +64,13 @@ export async function handleRestore(i: ChatInputCommandInteraction): Promise<voi
     return;
   }
 
-  const selectedBackup = backupOpt || backups[backups.length - 1];
-  const latest = backups[backups.length - 1];
+  const latest = backups.at(-1);
+  if (!latest) {
+    await i.editReply({ embeds: [embed.warning(restore.noBackups.title, restore.noBackups.description)] });
+    return;
+  }
+
+  const selectedBackup = backupOpt || latest;
 
   // ── Confirmation ─────────────────────────────────────────────────────────
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(

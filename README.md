@@ -1,6 +1,6 @@
-# ATM10 on Railway
+# Eternia ATM10 on Railway
 
-Infrastructure for running **All the Mods 10** (NeoForge 1.21.1) on Railway, managed through a Discord bot.
+Personal infrastructure for running our **All the Mods 10** (NeoForge 1.21.1) server on Railway, with a custom Discord bot for server control, backups, inventory restores, and player profiles.
 
 The repository contains two independent Railway services:
 
@@ -131,10 +131,13 @@ Do not remove the version pin on a running world. An unintended modpack update c
 | `/stop`          | Manage Guild  | Broadcasts a 15-second warning in game via RCON, then sends `stop`                             |
 | `/restart`       | Manage Guild  | Stops the server, waits for it to go offline, then polls until Railway brings it back online   |
 | `/players`       | everyone      | Lists connected players. Uses RCON `list` for accuracy if available, falls back to status ping |
+| `/profile`       | everyone      | Displays a player's adventure profile from world stats, advancements, and saved player data     |
 | `/say <message>` | everyone      | Broadcasts a message in game attributed to the Discord username                                |
 | `/cmd <command>` | Administrator | Sends an arbitrary RCON command and returns the response                                       |
+| `/backup`        | Manage Guild  | Creates a backup archive immediately and makes it available to `/restore`                      |
+| `/restore`       | Manage Guild  | Restores one player's inventory from the latest backup or a chosen backup timestamp            |
 
-`/stop` and `/restart` require the **Manage Guild** Discord permission. `/cmd` requires **Administrator**.
+`/stop`, `/restart`, `/backup`, and `/restore` require the **Manage Guild** Discord permission. `/cmd` requires **Administrator**.
 
 ---
 
